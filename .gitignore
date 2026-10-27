@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+upload/
+library*_helpers/
+CondominioFacil/Exemplos/
+*.zip
+*.doc
+*.docx
+*.pdf
+*.xlsx
+*.xls
+*.csv
+responsaveis.json
+arquivos.json
+atualizacao.json
