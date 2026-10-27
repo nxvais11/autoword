@@ -9,7 +9,7 @@ Aplicativo Windows para atualizar, individualmente ou em lote, os documentos men
 - Busca em lote na pasta principal, com prévia opcional e validação automática.
 - Planilha de responsáveis com associação de colunas e monitoramento seletivo.
 - Impressão dos resultados somente após uma atualização individual concluída.
-- Interface clara com painéis e botões arredondados, sem novas dependências.
+- Interface simples com controles padrão e paleta clara, sem desenhos personalizados ou animações.
 - Atualização automática do programa pelas Releases públicas deste repositório, sem token no computador.
 
 ## Publicação automática

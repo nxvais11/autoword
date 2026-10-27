@@ -160,8 +160,10 @@ O GitHub Actions executa os testes e monta uma Release numerada a cada alteraç�
 
 ## Interface 0.8
 
-A tela principal usa cinza suave, painéis brancos e azul acinzentado nas ações.
-Os painéis e os botões têm cantos arredondados, sem dependências adicionais.
+A tela principal usa cinza suave, branco e azul acinzentado nas ações.
+A interface voltou aos controles padrão do Tk, sem cantos personalizados,
+imagens geradas ou animações. As cores são aplicadas diretamente aos controles.
+Opções reutiliza a mesma janela, e o registro continua sendo atualizado em blocos.
 Origem, destino e competência ficam no topo; a lista mostra a quantidade de
 condomínios selecionados. A conferência continua opcional.
 

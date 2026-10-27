@@ -28,7 +28,8 @@ class Interface(unittest.TestCase):
                         patch('app.MAPPINGS', root/'arquivos.json')]
         for item in self.patches:
             item.start()
-        self.app = App()
+        with patch('tkinter.PhotoImage', side_effect=AssertionError('Interface simples não deve gerar imagens')):
+            self.app = App()
         self.app.geometry('1000x760')
         self.app.update()
 
@@ -148,7 +149,7 @@ class Interface(unittest.TestCase):
         self.app.update()
         self.assertEqual(str(self.app.print_button.cget('state')), 'disabled')
 
-    def test_pdf_option_removed_and_buttons_remain_native_and_rounded(self):
+    def test_pdf_option_removed_and_buttons_use_standard_widgets(self):
         from tkinter import ttk
         self.app.options_dialog()
         def labels(widget):
@@ -160,30 +161,23 @@ class Interface(unittest.TestCase):
             return values
         self.assertFalse(any('PDF' in text for text in labels(self.app)))
         self.assertTrue(any('planilha' in text for text in labels(self.app)))
-        from tkinter import font
-        title = font.Font(root=self.app, font=self.app.style.lookup('Title.TLabel','font'))
-        self.assertGreaterEqual(title.actual('size'), 20)
         self.assertIsInstance(self.app.print_button, ttk.Button)
-        self.assertIn('rounded', str(self.app.style.layout('Primary.TButton')))
+        self.assertNotIn('rounded', str(self.app.style.layout('Primary.TButton')))
 
-    def test_round_corners_match_parent_in_every_state_without_native_focus_box(self):
+    def test_simple_theme_has_no_custom_images_or_layout_elements(self):
         from theme import COLORS
-        for style, parent in (('TButton', COLORS['bg']), ('Primary.TButton', COLORS['bg']),
-                              ('Card.TButton', COLORS['panel'])):
-            self.assertNotIn('Button.focus', str(self.app.style.layout(style)))
-            for state in ((), ('active',), ('pressed',), ('focus',), ('disabled',)):
-                self.assertEqual(self.app.style.lookup(style, 'background', state), parent)
-        for (fill,parent,outline,radius), image in self.app._rounded_image_cache.items():
-            expected = tuple(int(parent[i:i+2],16) for i in (1,3,5))
-            self.assertEqual(image.get(0,0), expected)
-            self.assertEqual(image.get(image.width()-1,image.height()-1), expected)
-        self.assertTrue(any(str(control.cget('style'))=='Card.TButton'
-                            for control,_ in self.app.controls if control.winfo_class()=='TButton'))
+        self.assertFalse(hasattr(self.app, '_theme_images'))
+        self.assertFalse(hasattr(self.app, '_rounded_image_cache'))
+        for style in ('TButton','Primary.TButton','Card.TFrame'):
+            self.assertNotIn('rounded', str(self.app.style.layout(style)))
+        self.assertEqual(self.app.style.layout('Primary.TButton'), self.app.style.layout('TButton'))
+        self.assertEqual(self.app.style.lookup('TFrame','background'), COLORS['bg'])
+        self.assertEqual(self.app.style.lookup('Primary.TButton','background'), COLORS['accent'])
+        self.assertEqual(self.app.style.lookup('Treeview','fieldbackground'), COLORS['panel'])
 
-    def test_options_reopen_reuses_widgets_and_images_without_delayed_construction(self):
+    def test_options_reopen_reuses_standard_widgets_without_visual_allocations(self):
         import time
         from theme import apply_theme
-        before = len(self.app._theme_images)
         first = self.app.options_dialog()
         children = tuple(first.winfo_children())
         self.app.tk.call(first.protocol('WM_DELETE_WINDOW'))
@@ -196,10 +190,9 @@ class Interface(unittest.TestCase):
         self.assertIs(first, second)
         self.assertEqual(children, tuple(second.winfo_children()))
         self.assertFalse(self.app.doc_choices[0].get())
-        with patch('theme.rounded_image') as create_image:
+        with patch('tkinter.PhotoImage') as create_image:
             apply_theme(self.app)
         create_image.assert_not_called()
-        self.assertEqual(before, len(self.app._theme_images))
         print(f'AUTOWORD_OPTIONS_REOPEN_SECONDS={elapsed:.4f}')
 
     def test_log_burst_yields_to_ui_and_appends_text_once_per_tick(self):

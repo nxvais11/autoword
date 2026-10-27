@@ -87,7 +87,7 @@ class App(tk.Tk):
         self.after(3000, self.watch_sheet)
 
     def build_interface(self):
-        top = ttk.Frame(self, padding=(20, 16))
+        top = ttk.Frame(self, padding=16)
         top.pack(fill='both', expand=True)
         top.columnconfigure(0, weight=1)
         top.rowconfigure(5, weight=1)
@@ -230,8 +230,7 @@ class App(tk.Tk):
         self.details_button.configure(text='Ocultar detalhes' if self.details_open else 'Mostrar detalhes')
 
     def button(self, parent, text, command):
-        style = 'Card.TButton' if str(parent.cget('style'))=='Card.TFrame' else 'TButton'
-        b = ttk.Button(parent, text=text, command=command, style=style)
+        b = ttk.Button(parent, text=text, command=command)
         self.controls.append((b, 'normal'))
         return b
 
