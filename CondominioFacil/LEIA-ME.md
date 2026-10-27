@@ -150,3 +150,17 @@ Após receber esta versão uma vez, continue abrindo por **INICIAR.vbs**. O inic
 Em erro de conexão, a versão instalada continua disponível. Em falha de instalação, o código anterior é restaurado. Cadastros, modelos internos e documentos dos condomínios não são substituídos pelo atualizador. O estado da consulta fica em `%LOCALAPPDATA%\CondominioFacil\atualizacao.json`; nenhum token é necessário para este repositório público.
 
 O GitHub Actions executa os testes e monta uma Release numerada a cada alteração de código enviada à branch main. Somente depois dos testes a versão é publicada; não é preciso montar ou subir ZIP manualmente nas próximas alterações.
+# Interface 0.7
+
+A tela principal usa azul escuro e destaca apenas a atualização em laranja.
+Origem, destino e competência ficam no topo; a lista mostra a quantidade de
+condomínios selecionados. A conferência continua opcional.
+
+O registro fica em **Mostrar detalhes**. Abre automaticamente na conferência
+e nos avisos de revisão/erro, sem criar arquivos de relatório.
+**Opções** mantém responsáveis, planilha, PDFs, seleção dos documentos e atualizações.
+
+Atalhos: **Ctrl+O** abre uma pasta, **Ctrl+Enter** atualiza, **F1** abre as opções
+e **Ctrl+A** seleciona todos quando o foco está na lista. Durante uma tarefa,
+os controles ficam bloqueados e **Cancelar** permanece disponível.
+

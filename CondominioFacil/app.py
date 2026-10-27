@@ -1,4 +1,4 @@
-"""Condomínio Fácil 0.4.1 — aplicativo local para Windows e Microsoft Word."""
+"""Condomínio Fácil — aplicativo local para Windows e Microsoft Word."""
 import copy
 import json
 import os
@@ -15,6 +15,7 @@ from word_service import Word, discover, inspect_condo, generate, select_files, 
 from responsible_sheet import SheetMonitor, read_table, sheet_names, key
 from version import VERSION
 from resignations import load_pdf,find_pdfs,file_hash,propose_signature
+from theme import apply_theme, COLORS
 
 DATA = Path(os.environ.get('LOCALAPPDATA', str(Path.home())))/'CondominioFacil'
 CONFIG = DATA/'responsaveis.json'
@@ -23,6 +24,7 @@ MAPPINGS = DATA/'arquivos.json'
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.style = apply_theme(self)
         self.title(f'Condomínio Fácil — atualização de documentos • versão {VERSION}')
         height = min(860,self.winfo_screenheight()-40)
         self.geometry(f'{min(1180,self.winfo_screenwidth()-40)}x{height}')
@@ -77,62 +79,149 @@ class App(tk.Tk):
         self.sheet_status = tk.StringVar(value='Nenhuma planilha vinculada.')
         self.month = tk.StringVar(value=MONTHS[date.today().month-1].title())
         self.year = tk.StringVar(value=str(date.today().year))
-        self.status = tk.StringVar(value='Selecione a pasta dos quatro documentos ou a pasta principal dos condomínios.')
+        self.status = tk.StringVar(value='Escolha uma pasta para começar. A conferência é opcional.')
         self.controls = []
-        top = ttk.Frame(self, padding=16)
-        top.pack(fill='both', expand=True)
-        ttk.Label(top, text='Atualize a prestação de contas em lote', font=('Segoe UI', 18, 'bold')).pack(anchor='w')
-        ttk.Label(top, text='Atualize um condomínio ou todos de uma vez • Prévia opcional').pack(anchor='w', pady=(3,14))
-        for title, variable, command in [('Pasta dos condomínios', self.folder, self.choose_root), ('Salvar em', self.destination, self.choose_output)]:
-            row = ttk.Frame(top)
-            row.pack(fill='x', pady=3)
-            ttk.Label(row, text=title, width=24).pack(side='left')
-            entry = ttk.Entry(row, textvariable=variable, state='normal' if variable is self.destination else 'readonly')
-            entry.pack(side='left', fill='x', expand=True, padx=5)
-            self.button(row, 'Selecionar…', command).pack(side='right')
-        dest_mode = ttk.Checkbutton(top, text='Criar subpasta (AAAA-MM)',variable=self.create_subfolder)
-        dest_mode.pack(anchor='w', pady=3)
-        self.controls.append((dest_mode,'normal'))
-        row = ttk.Frame(top)
-        row.pack(fill='x', pady=12)
-        ttk.Label(row, text='Competência:').pack(side='left')
-        months = ttk.Combobox(row, textvariable=self.month, values=[m.title() for m in MONTHS], state='readonly', width=15)
-        months.pack(side='left', padx=8)
-        months.bind('<<ComboboxSelected>>', self.invalidate)
-        self.controls.append((months, 'readonly'))
-        year = ttk.Spinbox(row, textvariable=self.year, from_=2000, to=2099, width=7)
-        year.pack(side='left')
-        self.controls.append((year, 'normal'))
-        self.year.trace_add('write', self.invalidate)
-        self.button(row, 'Selecionar todos', self.select_all).pack(side='left', padx=12)
-        self.button(row, 'Opções…', self.options_dialog).pack(side='right')
-        ttk.Label(top, text='Sem subpasta: substitui os documentos selecionados. Destino vazio: usa a própria pasta de cada condomínio.').pack(anchor='w')
-        frame = ttk.Frame(top)
-        frame.pack(fill='both', expand=True, pady=6)
-        self.tree = ttk.Treeview(frame, columns=('name','state'), show='headings', selectmode='extended', height=5)
-        self.tree.heading('name', text='Condomínio')
-        self.tree.heading('state', text='Situação dos arquivos')
-        self.tree.column('name', width=280)
-        self.tree.column('state', width=650)
-        self.tree.pack(side='left', fill='both', expand=True)
-        scroll = ttk.Scrollbar(frame, command=self.tree.yview)
-        scroll.pack(side='right', fill='y')
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.bind('<<TreeviewSelect>>', self.invalidate)
-        actions = ttk.Frame(top)
-        actions.pack(fill='x', pady=8)
-        self.button(actions, 'Conferir alterações (opcional)', self.inspect).pack(side='left')
-        self.generate_button = self.button(actions, 'Atualizar documentos', self.run_generation)
-        self.generate_button.pack(side='left', padx=10)
-        self.button(actions, 'Abrir última saída', self.open_output).pack(side='right')
-        self.cancel_button = ttk.Button(actions, text='Cancelar', command=self.cancel.set, state='disabled')
-        self.cancel_button.pack(side='right', padx=8)
-        self.logbox = tk.Text(top, height=6, wrap='word', font=('Consolas', 10), state='disabled')
-        self.logbox.pack(fill='both', expand=True)
-        ttk.Label(top, textvariable=self.status, wraplength=1050).pack(anchor='w', pady=(8,0))
+        self.build_interface()
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.after(100, self.poll)
         self.after(3000, self.watch_sheet)
+
+    def build_interface(self):
+        top = ttk.Frame(self, padding=(20, 16))
+        top.pack(fill='both', expand=True)
+        top.columnconfigure(0, weight=1)
+        top.rowconfigure(5, weight=1)
+        header = ttk.Frame(top)
+        header.grid(row=0, column=0, sticky='ew', pady=(0, 12))
+        title = ttk.Frame(header)
+        title.pack(side='left')
+        ttk.Label(title, text='Documentos em dia', style='Title.TLabel').pack(anchor='w')
+        ttk.Label(title, text='Condomínio Fácil  /  Atualização em lote',
+                  style='Muted.TLabel').pack(anchor='w', pady=(3, 0))
+        self.button(header, 'Opções', self.options_dialog).pack(side='right')
+
+        card = ttk.Frame(top, style='Card.TFrame', padding=12)
+        card.grid(row=1, column=0, sticky='ew')
+        card.columnconfigure(1, weight=1)
+        for index, (label, variable, command) in enumerate((
+                ('Pasta de origem', self.folder, self.choose_root),
+                ('Salvar em', self.destination, self.choose_output))):
+            ttk.Label(card, text=label, style='Card.TLabel', width=16).grid(
+                row=index, column=0, sticky='w', pady=3)
+            entry = ttk.Entry(card, textvariable=variable,
+                              state='normal' if variable is self.destination else 'readonly')
+            entry.grid(row=index, column=1, sticky='ew', padx=(0, 12), pady=3)
+            self.controls.append((entry, 'normal' if variable is self.destination else 'readonly'))
+            self.button(card, 'Escolher…', command).grid(row=index, column=2, pady=3)
+        self.destination_hint = tk.StringVar()
+        ttk.Label(top, textvariable=self.destination_hint, style='Muted.TLabel').grid(
+            row=2, column=0, sticky='w', pady=(6, 8))
+        self.destination.trace_add('write', self.update_destination_hint)
+        self.create_subfolder.trace_add('write', self.update_destination_hint)
+        self.update_destination_hint()
+
+        period = ttk.Frame(top)
+        period.grid(row=3, column=0, sticky='ew', pady=(0, 8))
+        ttk.Label(period, text='Competência', style='Section.TLabel').pack(side='left', padx=(0, 12))
+        months = ttk.Combobox(period, textvariable=self.month,
+                             values=[m.title() for m in MONTHS], state='readonly', width=14)
+        months.pack(side='left', padx=(0, 8))
+        months.bind('<<ComboboxSelected>>', self.invalidate)
+        self.controls.append((months, 'readonly'))
+        year = ttk.Spinbox(period, textvariable=self.year, from_=2000, to=2099, width=6)
+        year.pack(side='left', padx=(0, 16))
+        self.controls.append((year, 'normal'))
+        self.year.trace_add('write', self.invalidate)
+        subfolder = ttk.Checkbutton(period, text='Criar subpasta AAAA-MM', variable=self.create_subfolder)
+        subfolder.pack(side='right')
+        self.controls.append((subfolder, 'normal'))
+
+        list_header = ttk.Frame(top)
+        list_header.grid(row=4, column=0, sticky='ew', pady=(0, 6))
+        self.selection_summary = tk.StringVar(value='Condomínios')
+        ttk.Label(list_header, textvariable=self.selection_summary, style='Section.TLabel').pack(side='left')
+        self.button(list_header, 'Selecionar todos', self.select_all).pack(side='right')
+        self.list_area = ttk.Frame(top)
+        self.list_area.grid(row=5, column=0, sticky='nsew')
+        self.tree = ttk.Treeview(self.list_area, columns=('name', 'state'), show='headings',
+                                 selectmode='extended', height=6)
+        self.tree.heading('name', text='Condomínio')
+        self.tree.heading('state', text='Situação')
+        self.tree.column('name', width=280, minwidth=180)
+        self.tree.column('state', width=650, minwidth=240)
+        self.tree.pack(side='left', fill='both', expand=True)
+        scroll = ttk.Scrollbar(self.list_area, command=self.tree.yview)
+        scroll.pack(side='right', fill='y')
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.bind('<<TreeviewSelect>>', self.selection_changed)
+        self.tree.bind('<Control-a>', self.select_all_shortcut)
+        self.empty_state = ttk.Label(self.list_area, text='Escolha uma pasta para começar',
+                                      style='Muted.TLabel')
+        self.empty_state.place(relx=.5, rely=.5, anchor='center')
+
+        actions = ttk.Frame(top)
+        actions.grid(row=6, column=0, sticky='ew', pady=(10, 8))
+        self.generate_button = self.button(actions, 'Atualizar documentos', self.run_generation)
+        self.generate_button.configure(style='Primary.TButton')
+        self.generate_button.pack(side='left')
+        self.button(actions, 'Conferir (opcional)', self.inspect).pack(side='left', padx=8)
+        self.cancel_button = ttk.Button(actions, text='Cancelar', command=self.cancel.set, state='disabled')
+        self.cancel_button.pack(side='left')
+        self.button(actions, 'Abrir saída', self.open_output).pack(side='right')
+
+        self.progress = ttk.Progressbar(top, mode='indeterminate', maximum=100)
+        self.progress.grid(row=7, column=0, sticky='ew', pady=(0, 6))
+        footer = ttk.Frame(top)
+        footer.grid(row=8, column=0, sticky='ew')
+        self.status_label = ttk.Label(footer, textvariable=self.status, style='Muted.TLabel', wraplength=800)
+        self.status_label.pack(side='left', fill='x', expand=True)
+        footer.bind('<Configure>', lambda event: self.status_label.configure(wraplength=max(300, event.width-170)))
+        self.details_button = ttk.Button(footer, text='Mostrar detalhes', command=self.toggle_details)
+        self.details_button.pack(side='right', padx=(12, 0))
+        self.details_open = False
+        self.details_frame = ttk.Frame(top, padding=(0, 10, 0, 0))
+        self.logbox = tk.Text(self.details_frame, height=3, wrap='word', font=('Consolas', 10),
+                             background=COLORS['panel'], foreground=COLORS['text'],
+                             insertbackground=COLORS['text'], selectbackground=COLORS['selected'],
+                             selectforeground=COLORS['text'], relief='flat', padx=12, pady=10,
+                             highlightthickness=1, highlightbackground=COLORS['border'], state='disabled')
+        self.logbox.pack(side='left', fill='both', expand=True)
+        log_scroll = ttk.Scrollbar(self.details_frame, command=self.logbox.yview)
+        log_scroll.pack(side='right', fill='y')
+        self.logbox.configure(yscrollcommand=log_scroll.set)
+        self.bind('<Control-o>', lambda event: self.shortcut(self.choose_root))
+        self.bind('<Control-Return>', lambda event: self.shortcut(self.run_generation))
+        self.bind('<F1>', lambda event: self.shortcut(self.options_dialog))
+
+    def shortcut(self, command):
+        # Não atravessa janelas modais nem dispara ações durante uma geração.
+        if not self.busy and self.grab_current() is None:
+            command()
+        return 'break'
+
+    def select_all_shortcut(self, event=None):
+        return self.shortcut(self.select_all)
+
+    def selection_changed(self, *args):
+        self.invalidate()
+        self.selection_summary.set(f'Condomínios · {len(self.tree.selection())} de {len(self.condos)} selecionados')
+
+    def update_destination_hint(self, *args):
+        if self.create_subfolder.get():
+            text = 'Salva em uma subpasta AAAA-MM no destino de cada condomínio.'
+        elif self.destination.get().strip():
+            text = 'Substitui somente os documentos escolhidos na pasta de destino.'
+        else:
+            text = 'Destino vazio: atualiza os documentos na própria pasta de cada condomínio.'
+        self.destination_hint.set(text)
+
+    def toggle_details(self, show=None):
+        self.details_open = not self.details_open if show is None else show
+        if self.details_open:
+            self.details_frame.grid(row=9, column=0, sticky='ew')
+        else:
+            self.details_frame.grid_remove()
+        self.details_button.configure(text='Ocultar detalhes' if self.details_open else 'Mostrar detalhes')
 
     def button(self, parent, text, command):
         b = ttk.Button(parent, text=text, command=command)
@@ -140,6 +229,8 @@ class App(tk.Tk):
         return b
 
     def log(self, text):
+        if re.search(r'\b(ERRO|REVISAR|FALHOU)\b', text, re.IGNORECASE):
+            self.toggle_details(True)
         self.logbox.configure(state='normal')
         self.logbox.insert('end', text+'\n')
         self.logbox.see('end')
@@ -167,6 +258,10 @@ class App(tk.Tk):
         self.condos = condos
         self.invalidate()
         self.tree.delete(*self.tree.get_children())
+        if condos:
+            self.empty_state.place_forget()
+        else:
+            self.empty_state.place(relx=.5, rely=.5, anchor='center')
         for i, condo in enumerate(condos):
             self.tree.insert('', 'end', iid=str(i), values=(condo['name'], ' / '.join(condo['errors']) or '4 arquivos encontrados — pronto para atualizar'))
             if condo['errors']:
@@ -174,8 +269,9 @@ class App(tk.Tk):
                 self.log('  Arquivos Word encontrados: '+('; '.join(condo['found']) or 'nenhum'))
                 self.log('  Use “Opções → Selecionar os 4 arquivos…” para indicar os nomes diferentes.')
         self.select_all()
+        self.selection_changed()
         self.destination.set(condos[0]['folder'] if len(condos)==1 else '')
-        self.status.set(f'{len(condos)} pasta(s) encontrada(s). Destino vazio em lote: cada condomínio na própria pasta.')
+        self.status.set(f'{len(condos)} condomínio(s) encontrado(s). Escolha a competência e atualize.')
         self.last_jobs = {}
         for condo in condos:
             saved_job = self.mappings.get('__jobs__',{}).get(condo['folder'])
@@ -252,7 +348,7 @@ class App(tk.Tk):
     def options_dialog(self):
         dialog = tk.Toplevel(self)
         dialog.title('Opções')
-        dialog.geometry('620x450')
+        dialog.geometry(f'660x{min(590, self.winfo_screenheight()-90)}')
         dialog.transient(self)
         dialog.grab_set()
         content = ttk.Frame(dialog,padding=18)
@@ -275,6 +371,8 @@ class App(tk.Tk):
             configure_updates(self)
         ttk.Button(content,text='Atualizações do aplicativo…',command=lambda:action(updates)).pack(fill='x',pady=5)
         ttk.Label(content,textvariable=self.sheet_status,wraplength=570).pack(anchor='w',pady=8)
+        ttk.Label(content, text='Atalhos: Ctrl+O · abrir pasta    Ctrl+Enter · atualizar    F1 · opções',
+                  style='Muted.TLabel').pack(anchor='w', pady=(4, 12))
         ttk.Button(content,text='Fechar',command=dialog.destroy).pack(anchor='e')
 
     def chosen_kinds(self):
@@ -296,6 +394,7 @@ class App(tk.Tk):
         if self.busy:
             return
         self.busy = True
+        self.progress.start(40)
         self.cancel.clear()
         for control, _ in self.controls:
             control.configure(state='disabled')
@@ -326,6 +425,7 @@ class App(tk.Tk):
                     self.tree.set(str(index), 'state', state)
                 elif kind == 'preview':
                     self.preview = value
+                    self.toggle_details(True)
                 elif kind == 'output':
                     self.output = value
                     self.log(f'Saída: {value}')
@@ -367,10 +467,13 @@ class App(tk.Tk):
                     condo, rows = value
                     self.after(10, lambda c=condo, r=rows: self.roster_dialog(c, r))
                 elif kind == 'error':
+                    self.toggle_details(True)
                     self.log('ERRO: '+value)
                     messagebox.showerror('Operação não concluída', value+'\nConfira se o Word está instalado e ativado.')
                 elif kind == 'done':
                     self.busy = False
+                    self.progress.stop()
+                    self.progress.configure(value=0)
                     if self.cancel.is_set():
                         self.pending_regen.clear()
                         self.pending_updates.clear()
@@ -381,7 +484,7 @@ class App(tk.Tk):
                         control.configure(state=state)
                     self.tree.configure(selectmode='extended')
                     self.cancel_button.configure(state='disabled')
-                    self.status.set('Operação finalizada. Confira os resultados e os avisos abaixo.')
+                    self.status.set('Operação cancelada.' if self.cancel.is_set() else 'Operação finalizada. Consulte os detalhes para ver os resultados.')
                     if self.pending_sheet is not None:
                         update, self.pending_sheet = self.pending_sheet, None
                         self.after(10,lambda v=update:self.accept_sheet_update(*v))
