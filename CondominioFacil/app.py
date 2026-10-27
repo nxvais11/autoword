@@ -26,7 +26,7 @@ class App(tk.Tk):
         super().__init__()
         self.style = apply_theme(self)
         self.title(f'Condomínio Fácil — atualização de documentos • versão {VERSION}')
-        height = min(860,self.winfo_screenheight()-40)
+        height = min(820,self.winfo_screenheight()-100)
         self.geometry(f'{min(1180,self.winfo_screenwidth()-40)}x{height}')
         self.minsize(900,min(650,height))
         self.events = queue.Queue()
@@ -175,7 +175,7 @@ class App(tk.Tk):
         self.cancel_button.pack(side='left')
         self.button(actions, 'Abrir saída', self.open_output).pack(side='right')
 
-        self.progress = ttk.Progressbar(top, mode='indeterminate', maximum=100)
+        self.progress = ttk.Progressbar(top, mode='determinate', maximum=100)
         self.progress.grid(row=7, column=0, sticky='ew', pady=(0, 6))
         footer = ttk.Frame(top)
         footer.grid(row=8, column=0, sticky='ew')
@@ -438,6 +438,7 @@ class App(tk.Tk):
         self.busy = True
         self.completion_message = None
         self.clear_print()
+        self.progress.configure(mode='indeterminate')
         self.progress.start(40)
         self.cancel.clear()
         for control, _ in self.controls:
@@ -526,7 +527,7 @@ class App(tk.Tk):
                 elif kind == 'done':
                     self.busy = False
                     self.progress.stop()
-                    self.progress.configure(value=0)
+                    self.progress.configure(mode='determinate', value=0)
                     if self.cancel.is_set():
                         self.pending_regen.clear()
                         self.pending_updates.clear()

@@ -160,6 +160,9 @@ class Interface(unittest.TestCase):
             return values
         self.assertFalse(any('PDF' in text for text in labels(self.app)))
         self.assertTrue(any('planilha' in text for text in labels(self.app)))
+        from tkinter import font
+        title = font.Font(root=self.app, font=self.app.style.lookup('Title.TLabel','font'))
+        self.assertGreaterEqual(title.actual('size'), 20)
         self.assertIsInstance(self.app.print_button, ttk.Button)
         self.assertIn('rounded', str(self.app.style.layout('Primary.TButton')))
 
@@ -236,6 +239,7 @@ class Interface(unittest.TestCase):
             encoded = result.stdout.strip()
             self.assertTrue(encoded.startswith('iVBOR'))
             print('AUTOWORD_VISUAL_'+label+':'+encoded)
+        self.app.geometry('1000x650+20+20')
         capture(self.app,'MAIN')
         dialog = self.app.options_dialog()
         capture(dialog,'OPTIONS')

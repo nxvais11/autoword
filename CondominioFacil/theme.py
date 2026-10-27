@@ -43,7 +43,10 @@ def apply_theme(root):
         return root._autoword_style
     c = COLORS
     root.configure(background=c['bg'])
-    root.option_add('*Font', ('Segoe UI', 10))
+    # Uma opção global *Font sobrepunha títulos e pesos definidos nos estilos.
+    from tkinter import font
+    for name in ('TkDefaultFont','TkTextFont','TkMenuFont','TkHeadingFont'):
+        font.nametofont(name,root=root).configure(family='Segoe UI',size=10)
     root.option_add('*Toplevel.background', c['bg'])
     root.option_add('*Canvas.background', c['bg'])
     root.option_add('*Listbox.background', c['field'])
