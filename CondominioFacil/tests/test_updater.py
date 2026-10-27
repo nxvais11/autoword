@@ -31,7 +31,7 @@ class UpdaterTests(unittest.TestCase):
         cls.packaged.cleanup()
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
-        self.root=Path(self.tmp.name)/'app'
+        self.root=Path(self.tmp.name).resolve()/'app'
         self.root.mkdir()
         (self.root/'version.py').write_text("VERSION = '0.5.0'\n")
         (self.root/'app.py').write_text('codigo anterior')
@@ -145,8 +145,8 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(writes[0]['TargetName'],'CondominioFacil/GitHub/'+REPO)
         self.assertFalse(any('token' in p.name for p in self.root.iterdir()))
     def test_checks_are_cached_to_avoid_delaying_each_open(self):
-        state=Path(self.tmp.name)/'atualizacao.json'
-        with patch('launcher.ROOT',self.root),patch('launcher.DATA',Path(self.tmp.name)),patch('launcher.STATE',state),\
+        state=Path(self.tmp.name).resolve()/'atualizacao.json'
+        with patch('launcher.ROOT',self.root),patch('launcher.DATA',Path(self.tmp.name).resolve()),patch('launcher.STATE',state),\
              patch('launcher.config',return_value={'repository':REPO,'private':True}),\
              patch('launcher.saved_token',return_value='not-a-real-token'),\
              patch('launcher.install_latest',return_value=('0.5.1',True)) as install:

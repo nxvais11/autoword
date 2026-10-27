@@ -95,7 +95,7 @@ class FakeWord:
 class Batch(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)/'origem'
+        self.root = Path(self.temp.name).resolve()/'origem'
         self.folder = self.root/'Condominio A'
         self.folder.mkdir(parents=True)
         for i, name in enumerate(FILES):
@@ -107,7 +107,7 @@ class Batch(unittest.TestCase):
         word = FakeWord()
         docs = inspect_condo(word, self.condos[0], 11, 2026, [])
         before = [d['path'].read_bytes() for d in docs]
-        output = generate(word, self.condos, {str(self.folder):docs}, Path(self.temp.name)/'saida', 11, 2026, lambda s:None, threading.Event())
+        output = generate(word, self.condos, {str(self.folder):docs}, Path(self.temp.name).resolve()/'saida', 11, 2026, lambda s:None, threading.Event())
         self.assertEqual(len(list((output/'Condominio A').glob('*.doc'))), 4)
         self.assertEqual(before, [d['path'].read_bytes() for d in docs])
         self.assertEqual(sorted(p.suffix for p in output.rglob('*') if p.is_file()), ['.doc']*4)
@@ -115,7 +115,7 @@ class Batch(unittest.TestCase):
         docs = inspect_condo(FakeWord(), self.condos[0], 11, 2026, [])
         docs[1]['path'].write_text('Mudou', encoding='utf-8')
         messages = []
-        output = generate(FakeWord(), self.condos, {str(self.folder):docs}, Path(self.temp.name)/'saida', 11, 2026, messages.append, threading.Event())
+        output = generate(FakeWord(), self.condos, {str(self.folder):docs}, Path(self.temp.name).resolve()/'saida', 11, 2026, messages.append, threading.Event())
         self.assertFalse((output/'Condominio A').exists())
         self.assertTrue(any('REVISAR' in s for s in messages))
         self.assertFalse(output.exists())
@@ -125,9 +125,9 @@ class Batch(unittest.TestCase):
                 super().write_copy(source, destination, text, changes)
                 raise ValueError('Falha de gravação')
         docs = inspect_condo(FakeWord(), self.condos[0], 11, 2026, [])
-        output = generate(BrokenWord(), self.condos, {str(self.folder):docs}, Path(self.temp.name)/'saida', 11, 2026, lambda s:None, threading.Event())
+        output = generate(BrokenWord(), self.condos, {str(self.folder):docs}, Path(self.temp.name).resolve()/'saida', 11, 2026, lambda s:None, threading.Event())
         self.assertFalse(output.exists())
-        self.assertFalse(list(Path(self.temp.name).rglob('.temporario_*')))
+        self.assertFalse(list(Path(self.temp.name).resolve().rglob('.temporario_*')))
     def test_cross_document_mismatch(self):
         self.condos[0]['files'][2].write_text('SETEMBRO/2026', encoding='utf-8')
         with self.assertRaises(ValueError):
@@ -148,7 +148,7 @@ class Batch(unittest.TestCase):
         (self.folder/(FILES[0]+'.doc')).unlink()
         self.assertTrue(discover(self.folder)[0]['errors'])
     def test_empty_folder_message(self):
-        empty = Path(self.temp.name)/'vazia'
+        empty = Path(self.temp.name).resolve()/'vazia'
         empty.mkdir()
         with self.assertRaisesRegex(ValueError, 'Nenhum condomínio'):
             discover(empty)
@@ -178,7 +178,7 @@ class Batch(unittest.TestCase):
             select_files(self.folder, paths)
     def test_manual_reject_other_folder(self):
         paths = self.condos[0]['files'][:]
-        elsewhere = Path(self.temp.name)/'fora.doc'
+        elsewhere = Path(self.temp.name).resolve()/'fora.doc'
         elsewhere.write_text('Outro documento')
         paths[0] = elsewhere
         with self.assertRaisesRegex(ValueError, 'mesma pasta'):
@@ -196,7 +196,7 @@ class Batch(unittest.TestCase):
         cancel = threading.Event()
         cancel.set()
         messages = []
-        output = generate(FakeWord(), self.condos, {}, Path(self.temp.name)/'saida', 11, 2026, messages.append, cancel)
+        output = generate(FakeWord(), self.condos, {}, Path(self.temp.name).resolve()/'saida', 11, 2026, messages.append, cancel)
         self.assertTrue(any('CANCELADO' in s for s in messages))
         self.assertFalse(output.exists())
     def test_existing_folder_only_selected_files_overwritten(self):

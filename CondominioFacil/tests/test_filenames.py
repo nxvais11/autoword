@@ -11,7 +11,7 @@ from test_engine import APPROVAL, FakeWord
 class FlexibleFilenames(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
     def tearDown(self):
         self.tmp.cleanup()
     def make_files(self,folder,names):
@@ -69,6 +69,13 @@ class FlexibleFilenames(unittest.TestCase):
                  prepare=lambda w,c:inspect_condo(w,c,11,2026,[]))
         self.assertEqual(sorted(p.name for p in folder.iterdir()),sorted(names))
         self.assertTrue(all('NOVEMBRO/2026' in (folder/name).read_text() for name in names))
+    def test_saved_mapping_accepts_equivalent_directory_spelling(self):
+        folder=self.root/'A'
+        names=['primeiro.doc','segundo.doc','terceiro.doc','quarto.doc']
+        self.make_files(folder,names)
+        alias=str(folder/'..'/'A')
+        found=discover(folder,{alias:[str(folder/name) for name in names]})
+        self.assertFalse(found[0]['errors'])
 
 if __name__=='__main__':
     unittest.main()

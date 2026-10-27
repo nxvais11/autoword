@@ -115,7 +115,7 @@ A primeira validação visual deve ser feita com cópias de um condomínio: abra
 
 ## Testes
 
-Na pasta do aplicativo, execute `python -m unittest discover -s tests -v`. Os testes não precisam de Word para executar. A versão 0.6.0 passou em 105 testes.
+Na pasta do aplicativo, execute `python -m unittest discover -s tests -v`. Os testes não precisam de Word para executar. A versão 0.6.0 passou em 107 testes.
 
 ## Abertura sem console
 

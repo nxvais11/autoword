@@ -51,7 +51,7 @@ class Parsing(unittest.TestCase):
     def test_scanned_pdf_uses_windows_ocr_without_command_injection(self):
         fake_reader=SimpleNamespace(is_encrypted=False,pages=[SimpleNamespace(extract_text=lambda:'')])
         with tempfile.TemporaryDirectory() as folder:
-            source=Path(folder)/"nome com ' aspas.pdf"
+            source=Path(folder).resolve()/"nome com ' aspas.pdf"
             source.write_bytes(b'fixture')
             result=SimpleNamespace(returncode=0,stdout=json.dumps({'pages':['RENÚNCIA de Pessoa Exemplo']}))
             with patch('pypdf.PdfReader',return_value=fake_reader),\
@@ -67,7 +67,7 @@ class Parsing(unittest.TestCase):
 class Applying(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
-        self.folder=Path(self.tmp.name)/'A'
+        self.folder=Path(self.tmp.name).resolve()/'A'
         self.folder.mkdir()
         for i,name in enumerate(FILES):
             (self.folder/(name+'.doc')).write_text(APPROVAL if i==0 else 'AGOSTO/2026',encoding='utf-8')

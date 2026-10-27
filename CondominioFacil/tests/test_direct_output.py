@@ -20,7 +20,7 @@ class CountingWord(FakeWord):
 class DirectOutput(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.folder = self.root/'A'
         self.folder.mkdir()
         for i,name in enumerate(FILES):

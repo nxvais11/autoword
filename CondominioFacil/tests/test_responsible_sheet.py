@@ -76,7 +76,7 @@ class Placeholders(unittest.TestCase):
 class Monitoring(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.path = self.root/'responsaveis.csv'
         self.condos = [{'name':'A','folder':str(self.root/'A')},{'name':'B','folder':str(self.root/'B')}]
         self.rows = [{'Condomínio':'A','Nome':'Maria','CPF':'001','Extra':'x'},

@@ -93,9 +93,14 @@ def discover(root, mappings=None, progress=None):
             files.append(matches[0] if len(matches) == 1 else None)
         condo = {'folder': str(folder), 'name': folder.name, 'files': files, 'errors': errors,
                  'found': [p.name for p in candidates]}
-        if mappings and str(folder) in mappings:
+        mapping=None
+        if mappings:
+            mapping=mappings.get(str(folder))
+            if mapping is None:
+                mapping=next((v for k,v in mappings.items() if not k.startswith('__') and Path(k).resolve()==folder),None)
+        if mapping is not None:
             try:
-                condo = select_files(folder, mappings[str(folder)])
+                condo = select_files(folder, mapping)
             except Exception as exc:
                 condo['errors'].append('Seleção manual salva precisa de revisão: '+str(exc))
         condo['name'] = owner.name if folder!=owner else owner.parent.name if filename_key(owner.name) in CLOSING_FOLDERS else owner.name
@@ -293,6 +298,8 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
             if validate:
                 validate()
             docs = preview.get(condo['folder'])
+            if docs is None:
+                docs=next((value for folder,value in preview.items() if Path(folder).resolve()==Path(condo['folder']).resolve()),None)
             if docs is None and prepare is not None:
                 docs = prepare(word,condo)
             if not docs:

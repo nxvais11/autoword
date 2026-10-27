@@ -19,7 +19,7 @@ def make_docs(folder):
 class BatchGeneration(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
     def tearDown(self):
         self.tmp.cleanup()
     def test_discovers_nested_condominiums_and_ignores_month_archives(self):
@@ -83,6 +83,16 @@ class BatchGeneration(unittest.TestCase):
             self.fail('A prévia válida não precisa ser refeita.')
         generate(FakeWord(),condos,{condos[0]['folder']:docs},self.root,11,2026,lambda s:None,
                  threading.Event(),targets=output_targets(condos,11,2026),overwrite_sources=True,prepare=unexpected)
+    def test_preview_accepts_equivalent_directory_spelling(self):
+        make_docs(self.root/'A')
+        condos=discover(self.root)
+        docs=inspect_condo(FakeWord(),condos[0],11,2026,[])
+        alias=str(self.root/'A'/'..'/'A')
+        finished=[]
+        generate(FakeWord(),condos,{alias:docs},self.root,11,2026,lambda s:None,threading.Event(),
+                 targets=output_targets(condos,11,2026),overwrite_sources=True,
+                 on_generated=lambda c,t,d:finished.append(c['name']))
+        self.assertEqual(finished,['A'])
     def test_ui_generation_does_not_require_verify_button(self):
         from app import App
         make_docs(self.root/'A')
@@ -111,7 +121,7 @@ class BatchGeneration(unittest.TestCase):
 class WordLocalSaving(unittest.TestCase):
     def test_local_processing_does_not_reopen_saved_document(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             source,dest = root/'origem.doc',root/'saida.doc'
             source.write_text('AGOSTO/2026')
             paths = []
@@ -136,7 +146,7 @@ class WordLocalSaving(unittest.TestCase):
             self.assertFalse(paths[0].exists())
     def test_failed_save_is_not_published(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             source,dest = root/'origem.doc',root/'saida.doc'
             source.write_text('AGOSTO/2026')
             dest.write_text('Existente')
