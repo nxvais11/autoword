@@ -8,7 +8,8 @@ Aplicativo Windows para atualizar, individualmente ou em lote, os documentos men
 - Atualização direta ou em subpasta opcional, preservando arquivos não selecionados.
 - Busca em lote na pasta principal, com prévia opcional e validação automática.
 - Planilha de responsáveis com associação de colunas e monitoramento seletivo.
-- Leitura de renúncias em PDF, inclusive OCR local do Windows, com revisão inicial de identidade e vigência antes da exclusão automática de assinaturas.
+- Impressão dos resultados somente após uma atualização individual concluída.
+- Interface clara com painéis e botões arredondados, sem novas dependências.
 - Atualização automática do programa pelas Releases públicas deste repositório, sem token no computador.
 
 ## Publicação automática
@@ -19,11 +20,18 @@ O atualizador verifica o SHA-256 fornecido pelo GitHub, a versão interna e os a
 
 ## Privacidade dos documentos
 
-Este repositório contém somente código, instruções e testes sintéticos. Os PDFs e os documentos reais dos condomínios, o texto bruto de OCR, configurações locais e credenciais não são publicados. O pacote de Release é montado por uma lista de arquivos de programa; não inclui testes, exemplos ou documentos. A leitura de renúncias usa pypdf/OCR do Windows localmente, sem enviar os PDFs a APIs de IA.
+Este repositório contém somente código, instruções e testes sintéticos. Os PDFs e os documentos reais dos condomínios, o texto bruto de OCR, configurações locais e credenciais não são publicados. O pacote de Release é montado por uma lista de arquivos de programa; não inclui testes, exemplos ou documentos.
 
-## Renúncias
+## Responsáveis e impressão
 
-Em Opções → Renúncias em PDF, adicione os documentos ou busque nas pastas selecionadas. Confirme condomínio, nome exato no Word, cargo, unidade e início dos efeitos. Datas ambíguas, manuscritos e cláusulas de recebimento exigem conferência inicial. Depois, os meses são atualizados automaticamente. O programa não inventa substitutos e não promove suplentes sem cadastro explícito. Detalhes em CondominioFacil/LEIA-ME.md.
+Os responsáveis são atualizados pela planilha vinculada ou pelo cadastro manual.
+A opção de renúncias em PDF foi retirada, e PDFs não bloqueiam mais a geração.
+
+O botão Imprimir é liberado somente após atualizar um único condomínio com sucesso.
+Permite escolher impressora e cópias dos documentos resultantes, verificando se os
+arquivos ainda correspondem à atualização. Uma geração em lote nunca libera
+impressão, mesmo se depois for selecionado apenas um condomínio. Nenhum documento
+é impresso automaticamente. Detalhes em CondominioFacil/LEIA-ME.md.
 
 ## Desenvolvimento
 
@@ -33,4 +41,4 @@ python -m unittest discover -s CondominioFacil/tests -v
 
 python scripts/build_release.py --output dist/CondominioFacil.zip
 
-Os testes de Word são simulados; a integração COM, a disponibilidade de idiomas de OCR e a qualidade do reconhecimento manuscrito dependem do Windows. O workflow verifica também a sintaxe do script de OCR.
+A interface é testada no Windows. Word e impressão são simulados nos testes; a validação física da impressão depende do Word e da impressora instalados. Os módulos antigos de PDF permanecem apenas para compatibilidade e não são chamados pela interface.

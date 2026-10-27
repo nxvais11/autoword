@@ -14,7 +14,7 @@ from engine import MONTHS, FILES, roster
 from word_service import Word, discover, inspect_condo, generate, select_files, output_targets, digest
 from responsible_sheet import SheetMonitor, read_table, sheet_names, key
 from version import VERSION
-from resignations import load_pdf,find_pdfs,file_hash,propose_signature
+from print_service import receipt_for, validate_receipt, available_printers, print_receipt
 from theme import apply_theme, COLORS
 
 DATA = Path(os.environ.get('LOCALAPPDATA', str(Path.home())))/'CondominioFacil'
@@ -60,8 +60,8 @@ class App(tk.Tk):
                 return
         self.generation_cache = self.mappings.get('__cache__',{})
         self.source_models = self.mappings.get('__models__',{})
-        self.resignations = self.mappings.get('__resignations__',{})
-        self.pdf_stats = {}
+        self.print_job = None
+        self.completion_message = None
         self.pending_updates = set(self.mappings.get('__pending_updates__',[]))
         if CONFIG.exists():
             try:
@@ -95,8 +95,8 @@ class App(tk.Tk):
         header.grid(row=0, column=0, sticky='ew', pady=(0, 12))
         title = ttk.Frame(header)
         title.pack(side='left')
-        ttk.Label(title, text='Documentos em dia', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(title, text='Condomínio Fácil  /  Atualização em lote',
+        ttk.Label(title, text='AutoWord', style='Title.TLabel').pack(anchor='w')
+        ttk.Label(title, text='Documentos dos condomínios',
                   style='Muted.TLabel').pack(anchor='w', pady=(3, 0))
         self.button(header, 'Opções', self.options_dialog).pack(side='right')
 
@@ -116,7 +116,9 @@ class App(tk.Tk):
         self.destination_hint = tk.StringVar()
         ttk.Label(top, textvariable=self.destination_hint, style='Muted.TLabel').grid(
             row=2, column=0, sticky='w', pady=(6, 8))
+        self.destination.trace_add('write', self.invalidate)
         self.destination.trace_add('write', self.update_destination_hint)
+        self.create_subfolder.trace_add('write', self.invalidate)
         self.create_subfolder.trace_add('write', self.update_destination_hint)
         self.update_destination_hint()
 
@@ -149,6 +151,8 @@ class App(tk.Tk):
         self.tree.heading('state', text='Situação')
         self.tree.column('name', width=280, minwidth=180)
         self.tree.column('state', width=650, minwidth=240)
+        self.tree.tag_configure('ready', foreground='#365F7D')
+        self.tree.tag_configure('review', foreground='#8B4D23')
         self.tree.pack(side='left', fill='both', expand=True)
         scroll = ttk.Scrollbar(self.list_area, command=self.tree.yview)
         scroll.pack(side='right', fill='y')
@@ -164,6 +168,8 @@ class App(tk.Tk):
         self.generate_button = self.button(actions, 'Atualizar documentos', self.run_generation)
         self.generate_button.configure(style='Primary.TButton')
         self.generate_button.pack(side='left')
+        self.print_button = ttk.Button(actions, text='Imprimir', command=self.print_dialog, state='disabled')
+        self.print_button.pack(side='left', padx=(8, 0))
         self.button(actions, 'Conferir (opcional)', self.inspect).pack(side='left', padx=8)
         self.cancel_button = ttk.Button(actions, text='Cancelar', command=self.cancel.set, state='disabled')
         self.cancel_button.pack(side='left')
@@ -242,6 +248,18 @@ class App(tk.Tk):
 
     def invalidate(self, *args):
         self.preview = {}
+        self.clear_print()
+
+    def clear_print(self):
+        self.print_job = None
+        if hasattr(self, 'print_button'):
+            self.print_button.configure(state='disabled')
+
+    def refresh_print(self):
+        selected = self.selected()
+        allowed = (not self.busy and self.print_job is not None and len(selected)==1
+                   and selected[0]['folder']==self.print_job['folder'])
+        self.print_button.configure(state='normal' if allowed else 'disabled')
 
     def choose_root(self):
         selected = filedialog.askdirectory(title='Pasta dos quatro documentos OU pasta principal dos condomínios')
@@ -263,7 +281,7 @@ class App(tk.Tk):
         else:
             self.empty_state.place(relx=.5, rely=.5, anchor='center')
         for i, condo in enumerate(condos):
-            self.tree.insert('', 'end', iid=str(i), values=(condo['name'], ' / '.join(condo['errors']) or '4 arquivos encontrados — pronto para atualizar'))
+            self.tree.insert('', 'end', iid=str(i), values=(condo['name'], 'Revisar arquivos · veja detalhes' if condo['errors'] else 'Pronto para atualizar'))
             if condo['errors']:
                 self.log(f"\n{condo['name']}: {' / '.join(condo['errors'])}")
                 self.log('  Arquivos Word encontrados: '+('; '.join(condo['found']) or 'nenhum'))
@@ -365,7 +383,6 @@ class App(tk.Tk):
         ttk.Button(content,text='Editar responsáveis do selecionado…',command=lambda:action(self.edit_roster)).pack(fill='x',pady=5)
         ttk.Button(content,text='Importar planilha de responsáveis…',command=lambda:action(self.import_sheet)).pack(fill='x',pady=5)
         ttk.Button(content,text='Desvincular planilha',command=lambda:action(self.unlink_sheet)).pack(fill='x',pady=5)
-        ttk.Button(content,text='Renúncias em PDF…',command=lambda:action(self.pdf_dialog)).pack(fill='x',pady=5)
         def updates():
             from launcher import configure_updates
             configure_updates(self)
@@ -394,6 +411,8 @@ class App(tk.Tk):
         if self.busy:
             return
         self.busy = True
+        self.completion_message = None
+        self.clear_print()
         self.progress.start(40)
         self.cancel.clear()
         for control, _ in self.controls:
@@ -426,6 +445,11 @@ class App(tk.Tk):
                 elif kind == 'preview':
                     self.preview = value
                     self.toggle_details(True)
+                elif kind == 'print_ready':
+                    self.print_job = value
+                elif kind == 'printed':
+                    self.completion_message = value
+                    self.log(value)
                 elif kind == 'output':
                     self.output = value
                     self.log(f'Saída: {value}')
@@ -447,8 +471,6 @@ class App(tk.Tk):
                     self.state_dirty = True
                 elif kind == 'sheet_setup':
                     self.after(10,lambda v=value:self.sheet_dialog(*v))
-                elif kind == 'pdf_setup':
-                    self.after(10,lambda v=value:self.pdf_dialog(v))
                 elif kind == 'sheet_update':
                     if self.busy:
                         self.pending_sheet = value
@@ -484,7 +506,12 @@ class App(tk.Tk):
                         control.configure(state=state)
                     self.tree.configure(selectmode='extended')
                     self.cancel_button.configure(state='disabled')
-                    self.status.set('Operação cancelada.' if self.cancel.is_set() else 'Operação finalizada. Consulte os detalhes para ver os resultados.')
+                    if self.cancel.is_set():
+                        self.clear_print()
+                    self.refresh_print()
+                    self.status.set('Operação cancelada.' if self.cancel.is_set() else
+                                    (self.completion_message or 'Atualização concluída. Impressão disponível.') if self.print_job else
+                                    'Operação finalizada. Consulte os detalhes para ver os resultados.')
                     if self.pending_sheet is not None:
                         update, self.pending_sheet = self.pending_sheet, None
                         self.after(10,lambda v=update:self.accept_sheet_update(*v))
@@ -511,7 +538,6 @@ class App(tk.Tk):
             return
         groups, mapping = copy.deepcopy(self.sheet_groups), copy.deepcopy(self.sheet_mapping)
         models = copy.deepcopy(self.source_models)
-        resignations = copy.deepcopy(self.resignations)
         monitor = self.sheet_monitor
         if self.sheet_monitor and (self.sheet_polling or self.sheet_monitor.raw_hash is None or self.sheet_error):
             messagebox.showinfo('Planilha', 'Aguarde a leitura da planilha ou resolva o aviso antes de conferir.')
@@ -529,7 +555,7 @@ class App(tk.Tk):
                             raise ValueError('Nenhuma linha da planilha associada a este condomínio.')
                         docs = inspect_condo(word, condo, month, year, config.get(condo['folder'], []), kinds,
                                              groups.get(condo['folder']), mapping, models=models,
-                                             resignations=resignations.get(condo['folder'],[]))
+                                             check_resignations=False)
                         preview[condo['folder']] = docs
                         self.events.put(('log', f"\n{condo['name']} — conferência aprovada"))
                         for d in docs:
@@ -569,209 +595,34 @@ class App(tk.Tk):
         monitor = self.sheet_monitor
         config = copy.deepcopy(self.config)
         groups,mapping = copy.deepcopy(self.sheet_groups),copy.deepcopy(self.sheet_mapping)
-        resignations = copy.deepcopy(getattr(self,'resignations',{}))
         self.state_dirty = True
         def prepare(word,condo):
             if monitor and condo['folder'] not in groups:
                 raise ValueError('Nenhuma linha da planilha associada a este condomínio.')
             return inspect_condo(word,condo,month,year,config.get(condo['folder'],[]),kinds,
                                  groups.get(condo['folder']),mapping,models=self.source_models,
-                                 resignations=resignations.get(condo['folder'],[]))
+                                 check_resignations=False)
         def task():
+            completed = []
+            def generated(condo, target, docs):
+                self.record_job(condo, target, docs, month, year)
+                if len(condos)==1:
+                    completed.append(receipt_for(condo, target, docs, month, year))
             with Word() as word:
                 result = generate(word, condos, preview, root, month, year,
                     lambda message: self.events.put(('log', message)), self.cancel,
                     targets=targets,cache=self.generation_cache,overwrite_sources=True,models=self.source_models,
-                    on_generated=lambda c,t,d:self.record_job(c,t,d,month,year),
+                    on_generated=generated,
                     validate=monitor.require_current if monitor else None,prepare=prepare,
                     progress=lambda i,total,name:self.events.put(('progress',f'Atualizando {i}/{total}: {name}')))
             self.events.put(('output', result))
+            if len(condos)==1 and len(completed)==1 and not self.cancel.is_set():
+                self.events.put(('print_ready', completed[0]))
         self.start(task)
 
     def record_job(self, condo, target, docs, month, year):
         self.events.put(('job',(condo['folder'], {'condo':copy.deepcopy(condo), 'target':target,
                         'month':month,'year':year,'kinds':tuple(d['kind'] for d in docs)})))
-
-    def load_pdfs(self,paths,records):
-        records={r['path']:r for r in records}
-        selected=self.selected()
-        default=selected[0]['folder'] if len(selected)==1 else ''
-        def task():
-            for index,path in enumerate(paths,1):
-                if self.cancel.is_set():
-                    break
-                self.events.put(('progress',f'Lendo PDF {index}/{len(paths)}: {Path(path).name}'))
-                try:
-                    record=load_pdf(path,self.condos)
-                except Exception as exc:
-                    record={'path':str(Path(path).resolve()),'sha256':file_hash(path),'name':'','role':'','unit':'',
-                            'since':'','confirmed':False,'mode':'manual','warning':str(exc),'date_candidates':[]}
-                candidates=record.get('condo_candidates',[])
-                record['folder']=candidates[0] if len(candidates)==1 else default
-                records[record['path']]=record
-            from contextlib import ExitStack
-            with ExitStack() as stack:
-                word=None
-                texts={}
-                for record in records.values():
-                    condo=next((c for c in self.condos if c['folder']==record.get('folder')),None)
-                    if not condo or not condo['files'][0] or record.get('confirmed'):
-                        continue
-                    try:
-                        folder=condo['folder']
-                        if folder not in texts:
-                            source=condo['files'][0]
-                            saved=self.source_models.get(str(source))
-                            if saved and saved['current_hash']==digest(source):
-                                texts[folder]=saved['text']
-                            else:
-                                word=word or stack.enter_context(Word())
-                                texts[folder]=word.read(source)
-                        original,warning=propose_signature(record.get('name',''),record.get('unit',''),roster(texts[folder]))
-                        record['original_name']=original
-                        if warning:
-                            record['warning']+=' '+warning
-                    except Exception:
-                        record['warning']+=' Não foi possível ler as assinaturas; informe o nome exato que consta no Word.'
-            self.events.put(('pdf_setup',list(records.values())))
-        self.start(task,'Lendo os PDFs localmente…')
-
-    def pdf_dialog(self,records=None):
-        if not self.condos:
-            messagebox.showinfo('Renúncias','Selecione primeiro a pasta dos condomínios.')
-            return
-        folders={c['folder'] for c in self.condos}
-        if records is None:
-            records=[dict(r,folder=folder) for folder,rows in self.resignations.items() if folder in folders for r in rows]
-        dialog=tk.Toplevel(self)
-        dialog.title('Renúncias em PDF — revisão inicial')
-        dialog.geometry(f'{min(1200,self.winfo_screenwidth()-40)}x{min(680,self.winfo_screenheight()-60)}')
-        dialog.transient(self)
-        dialog.grab_set()
-        ttk.Label(dialog,text='Confirme uma vez quem renunciou e quando os efeitos começaram. Depois, a assinatura é retirada automaticamente na competência aplicável.',
-                  wraplength=1100,padding=12).pack(anchor='w')
-        ttk.Label(dialog,text='Não há promoção automática de suplentes. Se a data depender de recebimento, informe a data do protocolo. OCR pode errar nomes e manuscritos.',
-                  wraplength=1100,padding=8).pack(anchor='w')
-        host=ttk.Frame(dialog,padding=8)
-        host.pack(fill='both',expand=True)
-        canvas=tk.Canvas(host,highlightthickness=0)
-        scroll=ttk.Scrollbar(host,orient='vertical',command=canvas.yview)
-        scroll.pack(side='right',fill='y')
-        canvas.pack(side='top',fill='both',expand=True)
-        horizontal=ttk.Scrollbar(host,orient='horizontal',command=canvas.xview)
-        horizontal.pack(side='bottom',fill='x')
-        canvas.configure(yscrollcommand=scroll.set,xscrollcommand=horizontal.set)
-        grid=ttk.Frame(canvas)
-        canvas.create_window((0,0),window=grid,anchor='nw')
-        grid.bind('<Configure>',lambda e:canvas.configure(scrollregion=canvas.bbox('all')))
-        labels=['PDF','Pasta do condomínio','Nome exato no Word','Cargo','Unidade','Efeitos desde AAAA-MM-DD','Conferido','Ignorar']
-        for col,label in enumerate(labels):
-            ttk.Label(grid,text=label).grid(row=0,column=col,padx=5,pady=5)
-        variables=[]
-        for i,record in enumerate(records,1):
-            row=2*i-1
-            ttk.Label(grid,text=Path(record['path']).name,wraplength=160).grid(row=row,column=0,sticky='w',padx=5)
-            values={field:tk.StringVar(value=record.get(field,'')) for field in ('folder','role','unit','since')}
-            values['original_name']=tk.StringVar(value=record.get('original_name') or record.get('name',''))
-            values['confirmed']=tk.BooleanVar(value=record.get('confirmed',False))
-            values['ignored']=tk.BooleanVar(value=record.get('ignored',False))
-            ttk.Combobox(grid,textvariable=values['folder'],values=sorted(folders),state='readonly',width=26).grid(row=row,column=1,padx=4)
-            for col,field,width in [(2,'original_name',27),(3,'role',23),(4,'unit',7),(5,'since',16)]:
-                ttk.Entry(grid,textvariable=values[field],width=width).grid(row=row,column=col,padx=4,pady=6)
-            ttk.Checkbutton(grid,variable=values['confirmed']).grid(row=row,column=6)
-            ttk.Checkbutton(grid,variable=values['ignored']).grid(row=row,column=7)
-            note='Nome lido no PDF: '+(record.get('name') or 'não reconhecido')+'. '+record.get('warning','')
-            if record.get('date_candidates'):
-                note+=' Datas lidas: '+', '.join(record['date_candidates'])+'.'
-            ttk.Label(grid,text=note,wraplength=1080).grid(row=row+1,column=0,columnspan=8,sticky='w',padx=5,pady=(0,12))
-            variables.append((record,values))
-        if not records:
-            ttk.Label(grid,text='Adicione os PDFs ou busque arquivos com “renúncia” no nome nas pastas do condomínio.').grid(row=1,column=0,columnspan=8,pady=20)
-        def current_records():
-            return [dict(record,**{k:v.get() for k,v in values.items()}) for record,values in variables]
-        def add_files(search=False):
-            paths=[]
-            if search:
-                for condo in self.selected():
-                    paths.extend(map(str,find_pdfs(condo)))
-                paths=sorted(set(paths))
-            else:
-                paths=list(filedialog.askopenfilenames(parent=dialog,title='Selecionar PDFs de renúncia',filetypes=[('PDF','*.pdf')]))
-            if not paths:
-                return
-            current=current_records()
-            dialog.destroy()
-            self.load_pdfs(paths,current)
-        def save():
-            try:
-                rows=current_records()
-                for row in rows:
-                    if row.get('folder') not in folders:
-                        raise ValueError('Associe cada PDF ao condomínio correspondente.')
-                    if not row.get('ignored'):
-                        if not row.get('confirmed'):
-                            continue
-                        if not row['original_name'].strip() or not row['role'].strip():
-                            raise ValueError('Preencha o nome exato no Word e o cargo dos registros conferidos.')
-                        date.fromisoformat(row['since'])
-                    if file_hash(row['path'])!=row['sha256']:
-                        raise ValueError('O PDF mudou: use Adicionar/Reler PDFs para ler novamente.')
-                candidate=copy.deepcopy(self.resignations)
-                for folder in folders:
-                    candidate[folder]=[]
-                for row in rows:
-                    row['original_name']=row['original_name'].strip()
-                    candidate[row['folder']].append(row)
-                changed={f for f in folders if self.resignations.get(f,[])!=candidate.get(f,[])}
-                self.resignations=candidate
-                self.state_dirty=True
-                self.save_runtime_state()
-                for folder in changed:
-                    self.preview.pop(folder,None)
-                    if folder in self.last_jobs:
-                        self.pending_regen.add(folder)
-                        self.pending_updates.add(folder)
-                self.state_dirty=True
-                self.save_runtime_state()
-                dialog.destroy()
-                self.log('Renúncias salvas. As confirmadas serão aplicadas a partir da data informada; pendências bloqueiam a aprovação até revisão.')
-                self.after(20,self.auto_regenerate)
-            except Exception as exc:
-                messagebox.showerror('Renúncias não salvas',str(exc),parent=dialog)
-        buttons=ttk.Frame(dialog,padding=12)
-        buttons.pack(fill='x')
-        ttk.Button(buttons,text='Adicionar / Reler PDFs…',command=add_files).pack(side='left')
-        ttk.Button(buttons,text='Buscar nas pastas selecionadas',command=lambda:add_files(True)).pack(side='left',padx=8)
-        ttk.Button(buttons,text='Salvar',command=save).pack(side='right')
-        ttk.Button(buttons,text='Fechar',command=dialog.destroy).pack(side='right',padx=8)
-
-    def check_pdf_sources(self):
-        changed=False
-        for folder,records in self.resignations.items():
-            if folder not in {c['folder'] for c in self.condos}:
-                continue
-            for record in records:
-                path=record['path']
-                try:
-                    stat=Path(path).stat()
-                    current=(stat.st_mtime_ns,stat.st_size)
-                except OSError:
-                    current=('indisponivel',)
-                before=self.pdf_stats.setdefault(path,current)
-                if before!=current:
-                    self.pdf_stats[path]=current
-                    try:
-                        if file_hash(path)==record['sha256']:
-                            continue
-                    except OSError:
-                        pass
-                    record['confirmed']=False
-                    self.preview.pop(folder,None)
-                    self.log('PDF alterado ou indisponível: '+Path(path).name+'. Releia e confirme em Opções → Renúncias em PDF.')
-                    changed=True
-        if changed:
-            self.state_dirty=True
-            self.save_runtime_state()
 
     def save_sheet_setting(self, setting):
         candidate = copy.deepcopy(self.mappings)
@@ -798,7 +649,6 @@ class App(tk.Tk):
         self.mappings['__jobs__'] = saved_jobs
         self.mappings['__cache__'] = self.generation_cache
         self.mappings['__models__'] = self.source_models
-        self.mappings['__resignations__'] = self.resignations
         self.mappings['__pending_updates__'] = sorted(self.pending_updates)
         try:
             DATA.mkdir(parents=True,exist_ok=True)
@@ -934,7 +784,6 @@ class App(tk.Tk):
 
     def watch_sheet(self):
         if not self.busy:
-            self.check_pdf_sources()
             self.auto_regenerate()
             if not self.busy:
                 self.poll_sheet()
@@ -1012,7 +861,7 @@ class App(tk.Tk):
                         condo = job['condo']
                         docs = inspect_condo(word,condo,job['month'],job['year'],config.get(folder,[]),
                             job['kinds'],groups.get(folder),mapping,models=self.source_models,
-                            resignations=self.resignations.get(folder,[]))
+                            check_resignations=False)
                         generate(word,[condo],{folder:docs},job['target'].parent,job['month'],job['year'],
                             lambda msg:self.events.put(('log','Atualização automática — '+msg)),self.cancel,
                             targets={folder:job['target']},cache=self.generation_cache,validate=monitor.require_current if monitor else None,automatic=True,
@@ -1110,6 +959,69 @@ class App(tk.Tk):
         ttk.Button(actions,text='Adicionar assinatura',command=add_row).pack(side='left')
         ttk.Button(actions,text='Salvar cadastro',command=save).pack(side='right')
         ttk.Button(actions,text='Cancelar',command=dialog.destroy).pack(side='right',padx=8)
+
+    def print_dialog(self):
+        if self.busy or self.print_job is None or len(self.selected()) != 1:
+            messagebox.showinfo('Imprimir', 'Atualize um único condomínio antes de imprimir.', parent=self)
+            return
+        if self.selected()[0]['folder'] != self.print_job['folder']:
+            self.clear_print()
+            return
+        receipt = copy.deepcopy(self.print_job)
+        try:
+            validate_receipt(receipt)
+            names, default = available_printers()
+            if not names:
+                raise ValueError('Nenhuma impressora instalada no Windows.')
+        except Exception as exc:
+            self.clear_print()
+            messagebox.showerror('Impressão indisponível', str(exc), parent=self)
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title('Imprimir documentos')
+        dialog.geometry('620x430')
+        dialog.transient(self)
+        dialog.grab_set()
+        body = ttk.Frame(dialog, padding=24)
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text=receipt['name'], style='Section.TLabel').pack(anchor='w')
+        ttk.Label(body, text=f"Competência {receipt['month']:02}/{receipt['year']} · "
+                  f"{len(receipt['files'])} documento(s) atualizado(s)", style='Muted.TLabel').pack(anchor='w', pady=(4, 12))
+        for item in receipt['files']:
+            ttk.Label(body, text=Path(item['path']).name).pack(anchor='w', pady=2)
+        ttk.Label(body, text='Impressora').pack(anchor='w', pady=(16, 4))
+        printer = tk.StringVar(value=default)
+        ttk.Combobox(body, textvariable=printer, values=names, state='readonly').pack(fill='x')
+        row = ttk.Frame(body)
+        row.pack(fill='x', pady=12)
+        ttk.Label(row, text='Cópias').pack(side='left')
+        copies = tk.StringVar(value='1')
+        ttk.Spinbox(row, textvariable=copies, from_=1, to=99, width=5).pack(side='left', padx=10)
+        def confirm():
+            try:
+                count = int(copies.get())
+                if self.busy or self.print_job != receipt:
+                    raise ValueError('A atualização mudou. Feche esta janela e atualize o condomínio novamente.')
+                if printer.get() not in names or not 1 <= count <= 99:
+                    raise ValueError('Escolha a impressora e informe de 1 a 99 cópias.')
+                validate_receipt(receipt)
+            except Exception as exc:
+                messagebox.showerror('Impressão', str(exc), parent=dialog)
+                return
+            chosen = printer.get()
+            dialog.destroy()
+            def task():
+                with Word() as word:
+                    sent = print_receipt(word, receipt, chosen, count, self.cancel,
+                        progress=lambda i,total,name:self.events.put(('progress',f'Enviando à impressora {i}/{total}: {name}')))
+                self.events.put(('printed', f'{sent} de {len(receipt["files"])} documento(s) enviado(s) à impressora.'))
+                if sent == len(receipt['files']) and not self.cancel.is_set():
+                    self.events.put(('print_ready', receipt))
+            self.start(task, 'Preparando a impressão…')
+        actions = ttk.Frame(body)
+        actions.pack(side='bottom', fill='x')
+        ttk.Button(actions, text='Imprimir', style='Primary.TButton', command=confirm).pack(side='right')
+        ttk.Button(actions, text='Cancelar', command=dialog.destroy).pack(side='right', padx=8)
 
     def open_output(self):
         if self.output:

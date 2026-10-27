@@ -24,7 +24,7 @@ class Interface(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.patches = [patch('app.CONFIG', root/'responsaveis.json'),
+        self.patches = [patch('app.DATA', root), patch('app.CONFIG', root/'responsaveis.json'),
                         patch('app.MAPPINGS', root/'arquivos.json')]
         for item in self.patches:
             item.start()
@@ -128,6 +128,40 @@ class Interface(unittest.TestCase):
         self.app.destination.set('')
         self.assertIn('própria pasta', self.app.destination_hint.get())
 
+
+    def test_print_button_only_enabled_for_completed_individual_and_resets_on_edit(self):
+        condos = [dict(name=name, folder=str(Path(self.tmp.name)/name), errors=[],
+                       found=[], files=[None]*4) for name in ('Edifício A', 'Edifício B')]
+        self.app.apply_discovered(self.tmp.name, condos)
+        self.app.update()
+        self.assertEqual(str(self.app.print_button.cget('state')), 'disabled')
+        self.app.tree.selection_set('0')
+        self.app.update()
+        self.app.events.put(('print_ready', dict(folder=condos[0]['folder'], files=[])))
+        self.app.events.put(('done', None))
+        self.app.poll()
+        self.assertEqual(str(self.app.print_button.cget('state')), 'normal')
+        self.app.tree.selection_set('1')
+        self.app.update()
+        self.assertEqual(str(self.app.print_button.cget('state')), 'disabled')
+        self.app.tree.selection_set('0')
+        self.app.update()
+        self.assertEqual(str(self.app.print_button.cget('state')), 'disabled')
+
+    def test_pdf_option_removed_and_buttons_remain_native_and_rounded(self):
+        from tkinter import ttk
+        self.app.options_dialog()
+        def labels(widget):
+            values = []
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Button):
+                    values.append(str(child.cget('text')))
+                values.extend(labels(child))
+            return values
+        self.assertFalse(any('PDF' in text for text in labels(self.app)))
+        self.assertTrue(any('planilha' in text for text in labels(self.app)))
+        self.assertIsInstance(self.app.print_button, ttk.Button)
+        self.assertIn('rounded', str(self.app.style.layout('Primary.TButton')))
 
 if __name__ == '__main__':
     unittest.main()

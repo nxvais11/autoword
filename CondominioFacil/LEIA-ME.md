@@ -115,7 +115,7 @@ A primeira validação visual deve ser feita com cópias de um condomínio: abra
 
 ## Testes
 
-Na pasta do aplicativo, execute `python -m unittest discover -s tests -v`. Os testes não precisam de Word para executar. A versão 0.6.0 passou em 107 testes.
+Na pasta do aplicativo, execute `python -m unittest discover -s tests -v`. Os testes não precisam de Word para executar. O GitHub Actions valida regras, arquivos, impressão simulada e interface no Windows antes de publicar.
 
 ## Abertura sem console
 
@@ -123,23 +123,30 @@ Use **INICIAR.vbs** com dois cliques. Ele prepara o ambiente quando necessário 
 
 Falhas de preparação aparecem em uma caixa de mensagem. Erros de inicialização e da interface também são mostrados na tela, sem criar arquivos de log. A primeira abertura exige internet para a dependência já usada pelo programa; as seguintes são locais. A abertura no Windows deve ser conferida no seu computador.
 
-## Renúncias em PDF
+## Responsáveis pela planilha
 
-Em **Opções → Renúncias em PDF**, use **Adicionar / Reler PDFs** para selecionar os arquivos ou **Buscar nas pastas selecionadas** para procurar PDFs com “renúncia” no nome. A busca examina a pasta dos documentos, a pasta pai quando ela é um fechamento, e subpastas imediatas chamadas Renúncias, Assembleias ou Atas. Outras pastas e competências antigas não são percorridas livremente.
+A leitura de renúncias em PDF foi retirada da interface e do fluxo automático.
+PDFs existentes na pasta não bloqueiam a geração. As alterações dos responsáveis
+devem ser feitas na planilha vinculada ou no cadastro manual. Registros antigos
+de renúncia permanecem no cadastro local, mas não são aplicados pelo aplicativo.
 
-PDFs que já têm texto são lidos pelo pypdf. Digitalizações usam OCR local do Windows 10/11, com preferência por português do Brasil e fallback para os idiomas instalados. Os PDFs não são enviados ao GitHub ou a um serviço de IA. Manuscritos podem exigir preenchimento manual. Se o Windows não tiver OCR ou a leitura falhar, o formulário permite informar os dados conferidos no PDF.
+## Impressão individual
 
-Confira uma vez a pasta do condomínio, o nome EXATO que consta na assinatura do Word, o cargo, a unidade e a data de início dos efeitos no formato AAAA-MM-DD. Uma correspondência por unidade e primeiro nome pode ser proposta para abreviações, mas não é confirmada automaticamente. Marque **Conferido** e salve. Depois dessa revisão inicial, a aplicação aos meses seguintes é automática. É possível registrar várias renúncias de uma vez.
+O botão **Imprimir**, ao lado de **Atualizar documentos**, fica disponível somente
+depois de uma atualização individual concluída com sucesso. Atualizações em lote,
+canceladas ou com falha não liberam a impressão, mesmo que depois você selecione
+apenas um condomínio da lista.
 
-Se o documento disser que os efeitos começam no recebimento ou protocolo, informe essa data. Data da posse, eleição, impressão de e-mail ou resposta da administração não é adotada como data de renúncia por suposição. As datas encontradas são propostas para revisão, não conclusões legais.
+A janela de impressão mostra o condomínio, a competência e os arquivos
+efetivamente atualizados, e permite escolher impressora e quantidade de cópias.
+Somente esses resultados são impressos. O aplicativo não cria PDFs ou cópias
+intermediárias para imprimir e não muda a impressora padrão do Windows.
 
-Na aprovação de contas, a assinatura da pessoa é retirada quando a data confirmada for igual ou anterior ao último dia da competência. A linha de assinatura correspondente também é retirada; outras assinaturas e o cabeçalho coletivo dos conselheiros são preservados. Não se escolhe ou promove um suplente por conta própria. Um substituto explicitamente cadastrado por você é preservado no lugar da pessoa anterior. Se a pessoa não tiver assinatura no modelo, o aplicativo informa isso e não retira outra pessoa.
-
-Os arquivos de origem e as renúncias continuam permitindo gerar meses anteriores: o modelo interno conserva a composição original e considera a vigência escolhida. Se houver nova eleição ou retorno da mesma pessoa, revise/desative o evento antigo e cadastre a nova composição; não há interpretação automática de atas de eleição nesta versão.
-
-Um PDF novo com renúncia no nome, em local de busca conhecido, sinaliza revisão antes de alterar a aprovação. PDFs já registrados têm o hash conferido: alterações pedem nova leitura e confirmação. A verificação não autentica assinaturas digitais nem decide efeitos jurídicos. Use **Ignorar** para um arquivo que você conferiu e não deve aplicar. Alterar o conteúdo de um PDF ignorado também exige revisão.
-
-Os eventos ficam no arquivo de configuração existente, sem relatórios na pasta do condomínio. O texto bruto do OCR, CPFs e e-mails não são copiados para o cadastro do aplicativo. Os PDFs originais não são modificados. A configuração local pode conter nomes/cargos necessários à função e deve ser tratada como dado administrativo.
+Alterar a seleção, a competência, os documentos ou o destino invalida a liberação.
+Se um arquivo tiver mudado ou sido removido, atualize novamente antes de imprimir.
+O cancelamento impede os próximos documentos; páginas já enviadas à fila do
+Windows precisam ser canceladas nessa fila. Uma falha parcial não provoca
+reimpressão automática. A mensagem confirma envio à impressora, não a saída física.
 
 ## Atualizações automáticas do próprio aplicativo
 
@@ -150,15 +157,17 @@ Após receber esta versão uma vez, continue abrindo por **INICIAR.vbs**. O inic
 Em erro de conexão, a versão instalada continua disponível. Em falha de instalação, o código anterior é restaurado. Cadastros, modelos internos e documentos dos condomínios não são substituídos pelo atualizador. O estado da consulta fica em `%LOCALAPPDATA%\CondominioFacil\atualizacao.json`; nenhum token é necessário para este repositório público.
 
 O GitHub Actions executa os testes e monta uma Release numerada a cada alteração de código enviada à branch main. Somente depois dos testes a versão é publicada; não é preciso montar ou subir ZIP manualmente nas próximas alterações.
-# Interface 0.7
 
-A tela principal usa azul escuro e destaca apenas a atualização em laranja.
+## Interface 0.8
+
+A tela principal usa cinza suave, painéis brancos e azul acinzentado nas ações.
+Os painéis e os botões têm cantos arredondados, sem dependências adicionais.
 Origem, destino e competência ficam no topo; a lista mostra a quantidade de
 condomínios selecionados. A conferência continua opcional.
 
 O registro fica em **Mostrar detalhes**. Abre automaticamente na conferência
 e nos avisos de revisão/erro, sem criar arquivos de relatório.
-**Opções** mantém responsáveis, planilha, PDFs, seleção dos documentos e atualizações.
+**Opções** mantém responsáveis, planilha, seleção dos documentos e atualizações.
 
 Atalhos: **Ctrl+O** abre uma pasta, **Ctrl+Enter** atualiza, **F1** abre as opções
 e **Ctrl+A** seleciona todos quando o foco está na lista. Durante uma tarefa,

@@ -212,12 +212,12 @@ class Word:
         if not Path(destination).is_file() or not Path(destination).stat().st_size:
             raise ValueError('O Word não produziu um documento válido para publicação.')
 
-def inspect_condo(word, condo, month, year, rules, kinds=(0,1,2,3), sheet_rows=None, sheet_mapping=None, models=None, resignations=()):
+def inspect_condo(word, condo, month, year, rules, kinds=(0,1,2,3), sheet_rows=None, sheet_mapping=None, models=None, resignations=(), check_resignations=True):
     docs, baselines = [], set()
     if not kinds:
         raise ValueError('Selecione pelo menos um documento.')
     active_events=[]
-    if 0 in kinds:
+    if 0 in kinds and check_resignations:
         known={Path(e['path']).resolve() for e in resignations}
         if any(path not in known for path in find_pdfs(condo)):
             raise ValueError('Novo PDF de renúncia encontrado. Leia e confirme em Opções → Renúncias em PDF.')
