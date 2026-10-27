@@ -16,10 +16,11 @@ def rounded_image(root, fill, outline=None, radius=10):
         cy = min(max(y, radius), size-radius-1)
         return (x-cx)**2+(y-cy)**2 <= r*r
     for y in range(size):
-        for x in range(size):
-            if inside(x, y):
-                color = outline if outline and not inside(x, y, 1) else fill
-                image.put(color, (x, y))
+        pixels = [x for x in range(size) if inside(x, y)]
+        if pixels:
+            colors = [outline if outline and not inside(x, y, 1) else fill for x in pixels]
+            # Uma chamada por linha: evita milhares de chamadas Tcl na abertura.
+            image.put('{'+ ' '.join(colors) +'}', (pixels[0], y))
     return image
 
 def apply_theme(root):
