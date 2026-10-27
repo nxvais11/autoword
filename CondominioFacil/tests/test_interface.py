@@ -163,5 +163,82 @@ class Interface(unittest.TestCase):
         self.assertIsInstance(self.app.print_button, ttk.Button)
         self.assertIn('rounded', str(self.app.style.layout('Primary.TButton')))
 
+    def test_round_corners_match_parent_in_every_state_without_native_focus_box(self):
+        from theme import COLORS
+        for style, parent in (('TButton', COLORS['bg']), ('Primary.TButton', COLORS['bg']),
+                              ('Card.TButton', COLORS['panel'])):
+            self.assertNotIn('Button.focus', str(self.app.style.layout(style)))
+            for state in ((), ('active',), ('pressed',), ('focus',), ('disabled',)):
+                self.assertEqual(self.app.style.lookup(style, 'background', state), parent)
+        for (fill,parent,outline,radius), image in self.app._rounded_image_cache.items():
+            expected = tuple(int(parent[i:i+2],16) for i in (1,3,5))
+            self.assertEqual(image.get(0,0), expected)
+            self.assertEqual(image.get(image.width()-1,image.height()-1), expected)
+        self.assertTrue(any(str(control.cget('style'))=='Card.TButton'
+                            for control,_ in self.app.controls if control.winfo_class()=='TButton'))
+
+    def test_options_reopen_reuses_widgets_and_images_without_delayed_construction(self):
+        import time
+        from theme import apply_theme
+        before = len(self.app._theme_images)
+        first = self.app.options_dialog()
+        children = tuple(first.winfo_children())
+        self.app.tk.call(first.protocol('WM_DELETE_WINDOW'))
+        self.app.update()
+        self.assertEqual(first.state(), 'withdrawn')
+        self.app.doc_choices[0].set(False)
+        started = time.perf_counter()
+        second = self.app.options_dialog()
+        elapsed = time.perf_counter()-started
+        self.assertIs(first, second)
+        self.assertEqual(children, tuple(second.winfo_children()))
+        self.assertFalse(self.app.doc_choices[0].get())
+        with patch('theme.rounded_image') as create_image:
+            apply_theme(self.app)
+        create_image.assert_not_called()
+        self.assertEqual(before, len(self.app._theme_images))
+        print(f'AUTOWORD_OPTIONS_REOPEN_SECONDS={elapsed:.4f}')
+
+    def test_log_burst_yields_to_ui_and_appends_text_once_per_tick(self):
+        for index in range(500):
+            self.app.events.put(('log', f'Linha {index}'))
+        with patch.object(self.app.logbox, 'insert', wraps=self.app.logbox.insert) as insert:
+            self.app.poll()
+        self.assertGreaterEqual(self.app.events.qsize(), 420)
+        self.assertLess(self.app.events.qsize(), 500)
+        self.assertEqual(insert.call_count, 1)
+        self.assertIn('Linha 0\n', self.app.logbox.get('1.0','end'))
+
+    @unittest.skipUnless(sys.platform=='win32', 'Captura de interface usa Windows')
+    def test_visual_snapshot_main_and_options(self):
+        import os
+        import subprocess
+        if not os.environ.get('CI'):
+            self.skipTest('Captura disponível no ambiente de validação')
+        def capture(widget, label):
+            widget.lift()
+            widget.update()
+            x,y = widget.winfo_rootx(),widget.winfo_rooty()
+            w,h = widget.winfo_width(),widget.winfo_height()
+            script = (
+                "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Drawing;"
+                f"$b=New-Object System.Drawing.Bitmap({w},{h});"
+                "$g=[System.Drawing.Graphics]::FromImage($b);"
+                f"$g.CopyFromScreen({x},{y},0,0,$b.Size);"
+                "$m=New-Object System.IO.MemoryStream;"
+                "$b.Save($m,[System.Drawing.Imaging.ImageFormat]::Png);"
+                "[Convert]::ToBase64String($m.ToArray());"
+                "$g.Dispose();$b.Dispose();$m.Dispose()")
+            result = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],
+                                    capture_output=True,text=True,timeout=30,
+                                    creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+            self.assertEqual(result.returncode,0,result.stderr)
+            encoded = result.stdout.strip()
+            self.assertTrue(encoded.startswith('iVBOR'))
+            print('AUTOWORD_VISUAL_'+label+':'+encoded)
+        capture(self.app,'MAIN')
+        dialog = self.app.options_dialog()
+        capture(dialog,'OPTIONS')
+
 if __name__ == '__main__':
     unittest.main()

@@ -230,15 +230,22 @@ class App(tk.Tk):
         self.details_button.configure(text='Ocultar detalhes' if self.details_open else 'Mostrar detalhes')
 
     def button(self, parent, text, command):
-        b = ttk.Button(parent, text=text, command=command)
+        style = 'Card.TButton' if str(parent.cget('style'))=='Card.TFrame' else 'TButton'
+        b = ttk.Button(parent, text=text, command=command, style=style)
         self.controls.append((b, 'normal'))
         return b
 
     def log(self, text):
+        self.log_many([text])
+
+    def log_many(self, messages):
+        if not messages:
+            return
+        text = '\n'.join(messages)+'\n'
         if re.search(r'\b(ERRO|REVISAR|FALHOU)\b', text, re.IGNORECASE):
             self.toggle_details(True)
         self.logbox.configure(state='normal')
-        self.logbox.insert('end', text+'\n')
+        self.logbox.insert('end', text)
         self.logbox.see('end')
         self.logbox.configure(state='disabled')
 
@@ -364,11 +371,24 @@ class App(tk.Tk):
             self.destination.set(selected)
 
     def options_dialog(self):
+        dialog = getattr(self, 'options_window', None)
+        if dialog is not None and dialog.winfo_exists():
+            dialog.deiconify()
+            dialog.lift()
+            dialog.grab_set()
+            return dialog
         dialog = tk.Toplevel(self)
+        dialog.withdraw()  # Só exibe depois que todos os controles estão prontos.
+        self.options_window = dialog
         dialog.title('Opções')
         dialog.geometry(f'660x{min(590, self.winfo_screenheight()-90)}')
         dialog.transient(self)
-        dialog.grab_set()
+        def hide():
+            if self.grab_current() is dialog:
+                dialog.grab_release()
+            dialog.withdraw()
+        dialog.protocol('WM_DELETE_WINDOW', hide)
+        dialog.bind('<Escape>', lambda event: hide())
         content = ttk.Frame(dialog,padding=18)
         content.pack(fill='both',expand=True)
         ttk.Label(content,text='Documentos a atualizar',font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(0,8))
@@ -377,8 +397,8 @@ class App(tk.Tk):
         for value,label in zip(self.doc_choices,('Aprovação','Capa do livro','Anexo I','Anexo II')):
             ttk.Checkbutton(choices,text=label,variable=value,command=self.invalidate).pack(side='left',padx=5)
         def action(command):
-            dialog.destroy()
-            self.after(10,command)
+            hide()
+            self.after_idle(command)
         ttk.Button(content,text='Selecionar os 4 arquivos…',command=lambda:action(self.map_files)).pack(fill='x',pady=(18,5))
         ttk.Button(content,text='Editar responsáveis do selecionado…',command=lambda:action(self.edit_roster)).pack(fill='x',pady=5)
         ttk.Button(content,text='Importar planilha de responsáveis…',command=lambda:action(self.import_sheet)).pack(fill='x',pady=5)
@@ -390,7 +410,12 @@ class App(tk.Tk):
         ttk.Label(content,textvariable=self.sheet_status,wraplength=570).pack(anchor='w',pady=8)
         ttk.Label(content, text='Atalhos: Ctrl+O · abrir pasta    Ctrl+Enter · atualizar    F1 · opções',
                   style='Muted.TLabel').pack(anchor='w', pady=(4, 12))
-        ttk.Button(content,text='Fechar',command=dialog.destroy).pack(anchor='e')
+        ttk.Button(content,text='Fechar',command=hide).pack(anchor='e')
+        dialog.update_idletasks()
+        dialog.deiconify()
+        dialog.lift()
+        dialog.grab_set()
+        return dialog
 
     def chosen_kinds(self):
         return tuple(i for i,v in enumerate(self.doc_choices) if v.get())
@@ -430,11 +455,15 @@ class App(tk.Tk):
         threading.Thread(target=worker, daemon=False).start()
 
     def poll(self):
+        messages = []
+        deadline = time.perf_counter()+0.008
         try:
-            while True:
+            for _ in range(80):
+                if time.perf_counter() >= deadline:
+                    break
                 kind, value = self.events.get_nowait()
                 if kind == 'log':
-                    self.log(value)
+                    messages.append(value)
                 elif kind == 'progress':
                     self.status.set(value)
                 elif kind == 'discovered':
@@ -449,10 +478,10 @@ class App(tk.Tk):
                     self.print_job = value
                 elif kind == 'printed':
                     self.completion_message = value
-                    self.log(value)
+                    messages.append(value)
                 elif kind == 'output':
                     self.output = value
-                    self.log(f'Saída: {value}')
+                    messages.append(f'Saída: {value}')
                 elif kind == 'job':
                     folder, job = value
                     self.last_jobs[folder] = job
@@ -490,7 +519,9 @@ class App(tk.Tk):
                     self.after(10, lambda c=condo, r=rows: self.roster_dialog(c, r))
                 elif kind == 'error':
                     self.toggle_details(True)
-                    self.log('ERRO: '+value)
+                    messages.append('ERRO: '+value)
+                    self.log_many(messages)
+                    messages.clear()
                     messagebox.showerror('Operação não concluída', value+'\nConfira se o Word está instalado e ativado.')
                 elif kind == 'done':
                     self.busy = False
@@ -517,8 +548,9 @@ class App(tk.Tk):
                         self.after(10,lambda v=update:self.accept_sheet_update(*v))
         except queue.Empty:
             pass
+        self.log_many(messages)
         if self.winfo_exists():
-            self.after(100, self.poll)
+            self.after(10 if not self.events.empty() else 100, self.poll)
 
     def inspect(self):
         condos = self.selected()
