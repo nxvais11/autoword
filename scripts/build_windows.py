@@ -25,6 +25,13 @@ def icon(path):
     d.line(points([(145,188),(163,206),(198,167)]),fill='white',width=12*scale,joint='curve')
     im.resize((256,256),Image.Resampling.LANCZOS).save(path,format='ICO',sizes=[(n,n) for n in (16,24,32,48,64,128,256)])
 
+def check_executable(exe):
+    report=ROOT/'build'/'smoke-error.txt'
+    report.parent.mkdir(parents=True,exist_ok=True);report.unlink(missing_ok=True)
+    result=subprocess.run([str(exe),'--smoke-test','--smoke-report',str(report)],timeout=60)
+    if result.returncode:
+        raise RuntimeError(report.read_text(encoding='utf-8') if report.exists() else f'Falha ao abrir o executável: {result.returncode}')
+
 def build(version):
     icon(APP/'autoword.ico')
     (APP/'version.py').write_text(f'VERSION = {version!r}\n',encoding='utf-8')
@@ -38,7 +45,7 @@ def build(version):
     args += ['--collect-all','pypdfium2_raw','--collect-all','pypdfium2']
     subprocess.run(args+[str(APP/'launcher.py')],check=True)
     exe=ROOT/'dist/windows/AutoWord/AutoWord.exe'
-    subprocess.run([str(exe),'--smoke-test'],check=True,timeout=60)
+    check_executable(exe)
     compiler=shutil.which('ISCC') or r'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
     subprocess.run([compiler,'/DAppVersion='+version,str(ROOT/'scripts/installer.iss')],check=True)
     setup=ROOT/'dist/AutoWord-Setup.exe'
@@ -46,7 +53,7 @@ def build(version):
         destination=Path(folder)/'Installed AutoWord'
         for attempt in range(2):
             subprocess.run([str(setup),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR='+str(destination)],check=True,timeout=120)
-            subprocess.run([str(destination/'AutoWord.exe'),'--smoke-test'],check=True,timeout=60)
+            check_executable(destination/'AutoWord.exe')
             marker=destination/'arquivo_do_usuario.txt'
             if attempt:
                 assert marker.read_text()=='preservar'

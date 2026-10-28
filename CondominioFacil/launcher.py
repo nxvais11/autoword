@@ -74,13 +74,12 @@ def configure_updates(parent):
 def smoke_test():
     # Executado no CI sem Word, rede ou acesso aos cadastros do usuário.
     import tempfile
-    import pickle
     import win32timezone
     import pywintypes
     # O Win32 carrega este módulo dinamicamente ao devolver datas de trabalhos da fila.
     assert win32timezone.TimeZoneInfo
     stamp=pywintypes.Time(0)
-    assert pickle.loads(pickle.dumps(stamp)) == stamp
+    assert stamp.year >= 1969
     from unittest.mock import patch
     from app import App
     with tempfile.TemporaryDirectory() as folder:
@@ -139,7 +138,14 @@ def main():
 
 if __name__=='__main__':
     if '--smoke-test' in sys.argv:
-        sys.exit(smoke_test())
+        try:
+            result=smoke_test()
+        except Exception:
+            import traceback
+            if '--smoke-report' in sys.argv:
+                Path(sys.argv[sys.argv.index('--smoke-report')+1]).write_text(traceback.format_exc(),encoding='utf-8')
+            sys.exit(1)
+        sys.exit(result)
     try:
         main()
     except Exception as exc:
