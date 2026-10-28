@@ -4,7 +4,6 @@ import json
 import re
 import unicodedata
 from pathlib import Path
-from pypdf import PdfReader
 from word_service import discover,digest,print_layout,document_kind,filename_key,CLOSING_FOLDERS
 
 DEFAULTS={'root':r'Z:\_CONDOMÍNIOS ATIVOS','statements':r'Z:\OFX E EXTRATOS','reports':'',
@@ -43,6 +42,7 @@ def catalog(settings):
     return sorted(names,key=norm)
 
 def pdf_text(path,first=False):
+    from pypdf import PdfReader
     reader=PdfReader(path)
     if reader.is_encrypted and not reader.decrypt(''):
         raise ValueError('PDF protegido por senha.')

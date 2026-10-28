@@ -333,6 +333,25 @@ class Interface(unittest.TestCase):
             self.assertEqual(tree.set('0','status'),'Concluído')
             dialog.destroy();error.assert_not_called()
 
+    def test_workspace_startup_does_not_resolve_network_paths_on_ui_thread(self):
+        import threading
+        from central_ui import save_settings
+        from central_service import DEFAULTS
+        folder=Path(self.tmp.name)
+        save_settings(folder/'central.json',dict(DEFAULTS,root=str(folder),statements=str(folder)))
+        original=Path.resolve;main=threading.current_thread()
+        def resolve(path,*args,**kwargs):
+            if threading.current_thread() is main:
+                raise AssertionError('A interface não deve consultar caminhos da rede durante a abertura')
+            return original(path,*args,**kwargs)
+        with patch.object(Path,'resolve',autospec=True,side_effect=resolve),patch('central_ui.messagebox.showerror') as error:
+            self.app.open_central()
+            panel=self.app.central_panel
+            self.app.update()
+            self.assertTrue(panel.winfo_ismapped())
+            self.wait_central(panel)
+            error.assert_not_called()
+
     def test_open_combobox_popdown_does_not_break_periodic_monitor_or_shortcuts(self):
         from tkinter import ttk
         combo=next(control for control,_ in self.app.controls if isinstance(control,ttk.Combobox))
