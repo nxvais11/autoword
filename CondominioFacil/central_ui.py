@@ -16,6 +16,7 @@ from word_service import Word,discover
 from central_update import prepare_closing,closing_condo,run_update
 from print_service import available_printers
 from book_history import BookHistory,file_id
+from document_period import inspect_periods,period_summary
 
 
 def load_settings(path):
@@ -115,7 +116,7 @@ class CentralView:
         self.embedded=embedded
         self.parent=parent;self.path=Path(path);self.settings=load_settings(path)
         self.history=BookHistory(self.path.with_name('livros.json'))
-        self.operation=None;self.print_request=[]
+        self.operation=None;self.print_request=[];self.period_cache={}
         self.external_busy=False
         self.result=None;self.comparison=None;self.checked=set();self.busy=False;self.events=queue.Queue();self.cancel=parent.cancel
         if not embedded:
@@ -141,7 +142,9 @@ class CentralView:
         self.controls.extend([self.names,self.month_box,self.year_box])
         self.action(row,'Buscar arquivos',self.query).pack(side='left',padx=8)
         self.book_status=tk.StringVar(value='Pendente')
-        legend=ttk.Frame(body);legend.grid(row=2,column=0,sticky='ew',pady=8)
+        legend=ttk.Frame(body);legend.grid(row=2,column=0,sticky='ew',pady=4)
+        self.document_period=tk.StringVar(value='Competência dos Words: selecione um condomínio.')
+        ttk.Label(legend,textvariable=self.document_period,style='Section.TLabel',wraplength=1000).pack(side='bottom',anchor='w',pady=(4,0))
         ttk.Label(legend,textvariable=self.book_status,style='Section.TLabel').pack(side='right')
         ttk.Label(legend,text='☐ Não imprimir    ☑ Imprimir  •  Clique na caixinha para escolher. Recentes aparecem primeiro na lista.',style='Muted.TLabel').pack(side='left')
         host=ttk.Frame(body);host.grid(row=3,column=0,sticky='nsew')
@@ -196,6 +199,7 @@ class CentralView:
         if self.busy or self.parent.busy:return
         self.result=None;self.comparison=None;self.checked.clear();self.tree.delete(*self.tree.get_children());self.version.set('pdf')
         self.status.set('Clique em Buscar arquivos para a seleção atual.')
+        self.document_period.set('Competência dos Words: busque os arquivos para consultar.')
         self.refresh_book_status()
 
     def configure_paths(self):
@@ -225,7 +229,12 @@ class CentralView:
         self.invalidate()
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
         names=tuple(self.names.cget('values'))
-        self.run(lambda:check_obligations(search(settings,name,month,year,mappings,names=names),month,year),'search')
+        self.document_period.set('Competência dos Words: consultando…')
+        def work():
+            result=search(settings,name,month,year,mappings,names=names)
+            inspect_periods(result,self.period_cache,Word,self.cancel)
+            return check_obligations(result,month,year)
+        self.run(work,'search')
 
     def run(self,work,kind):
         if self.busy or self.parent.busy:return
@@ -286,7 +295,8 @@ class CentralView:
                     self.history.touch(self.settings['root'],value['name'])
                     self.names.configure(values=self.history.ordered_names(self.settings['root'],self.names.cget('values')))
                     self.refresh_book_status()
-                    self.result=value;self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
+                    self.result=value;self.show_period(value)
+                    self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
                     self.redraw();self.show_details('\n'.join(value['warnings']) or 'Arquivos localizados. Selecione o que deseja imprimir.')
                     self.status.set('Extratos: todos selecionados por padrão. Obrigações são opcionais e exigem conferência.')
                     if value.get('due_notice'):
@@ -299,7 +309,8 @@ class CentralView:
                 elif kind=='comparison':
                     self.comparison=value;self.version.set('pdf' if value['equal'] else '');self.redraw();self.show_details(value['diff']);self.status.set('Textos equivalentes: será usado o PDF pessoal.' if value['equal'] else 'Há diferenças. Confira e escolha PDF pessoal ou Word atual antes de imprimir.')
                 elif kind=='updated':
-                    self.result=value;self.redraw()
+                    self.result=value;self.show_period(value);self.redraw()
+                    self.show_details('\n'.join(value.get('warnings',[])))
                 elif kind=='preview_update':
                     self.show_details(value);self.status.set('Conferência concluída. Nenhum documento alterado.')
                 elif kind=='printed':self.status.set(value);self.show_details(value)
@@ -314,6 +325,12 @@ class CentralView:
                     self.parent.events.put(('central_done',None))
         except queue.Empty:pass
         if self.winfo_exists():self.poll_callback=self.after(100,self.poll)
+
+    def show_period(self,result):
+        summary=period_summary(result)
+        self.document_period.set(summary.split('\n')[0]+(' Confira os detalhes abaixo.' if '\n' in summary else ''))
+        if '\n' in summary:
+            result['warnings']=[summary]+result.get('warnings',[])
 
     def redraw(self):
         if not self.result:return
@@ -451,6 +468,10 @@ class CentralView:
             def updated(value):
                 self.history.updated(settings['root'],result['name'],result['period'],value['updated_kinds'])
                 if self.operation is not None:self.operation['words']=len(value['updated_kinds'])
+                try:inspect_periods(value,self.period_cache,Word,self.cancel)
+                except Exception as exc:
+                    value['document_periods']=[]
+                    value.setdefault('warnings',[]).append('Competência não consultada: '+str(exc))
                 self.events.put(('updated',value));self.parent.events.put(('output',Path(value['output'])))
             value,count=run_update(result,settings,month,year,state,self.cancel,
                 lambda text:self.events.put(('log',text)),print_rows=rows,on_generated=generated,on_updated=updated,word_factory=Word,printer=self.tracked_print)
