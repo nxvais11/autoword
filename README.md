@@ -1,6 +1,6 @@
 # AutoWord — Condomínio Fácil
 
-Aplicativo Windows para atualizar, individualmente ou em lote, os documentos mensais dos condomínios. Usa Microsoft Word instalado, Python 3.11+ e processamento local. Abra INICIAR.vbs após extrair o pacote da Release.
+Aplicativo Windows para atualizar, individualmente ou em lote, os documentos mensais dos condomínios. Usa Microsoft Word instalado, Python 3.11+ e processamento local. Baixe AutoWord-Setup.exe na Release para instalar o executável e criar o atalho. Não exige Python instalado; Word continua necessário. O ZIP de código permanece disponível para instalações anteriores.
 
 ## Funcionalidades
 
@@ -42,3 +42,16 @@ python -m unittest discover -s CondominioFacil/tests -v
 python scripts/build_release.py --output dist/CondominioFacil.zip
 
 A interface é testada no Windows. Word e impressão são simulados nos testes; a validação física da impressão depende do Word e da impressora instalados. Os módulos antigos de PDF permanecem apenas para compatibilidade e não são chamados pela interface.
+
+## Executável e instalador
+
+O CI gera um pacote PyInstaller onedir sem console e um instalador Inno Setup por usuário.
+Antes da publicação, abre e fecha a interface do executável, instala silenciosamente
+em uma pasta temporária com espaços, testa a versão instalada e repete a instalação
+para verificar a preservação de arquivos desconhecidos. Não há Word ou impressora
+no runner: essas integrações continuam sendo simuladas nos testes.
+
+O ícone é gerado em múltiplas resoluções no build a partir do desenho de documento
+conferido em assets/autoword.svg. Pillow e PyInstaller são dependências apenas de build.
+O executável baixa o instalador oficial com hash verificado em segundo plano e o
+executa após o processo fechar; não tenta sobrescrever o próprio executável em uso.

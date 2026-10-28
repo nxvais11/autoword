@@ -6,6 +6,7 @@ on:
     paths:
       - 'CondominioFacil/**'
       - 'scripts/**'
+      - 'assets/**'
       - '.github/workflows/release.yml'
   pull_request:
     branches: [main]
@@ -47,7 +48,7 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -55,6 +56,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: Preparar empacotamento Windows
+        run: python -m pip install -r CondominioFacil/requirements.txt 'pyinstaller>=6.20,<7' 'pillow>=11,<13'
       - name: Montar e publicar versão numerada automaticamente
         env:
           GH_TOKEN: ${{ github.token }}

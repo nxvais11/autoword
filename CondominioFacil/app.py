@@ -25,6 +25,9 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.style = apply_theme(self)
+        icon = Path(__file__).with_name('autoword.ico')
+        if icon.exists():
+            self.iconbitmap(str(icon))
         self.title(f'Condomínio Fácil — atualização de documentos • versão {VERSION}')
         height = min(820,self.winfo_screenheight()-100)
         self.geometry(f'{min(1180,self.winfo_screenwidth()-40)}x{height}')
@@ -474,6 +477,10 @@ class App(tk.Tk):
                 elif kind == 'preview':
                     self.preview = value
                     self.toggle_details(True)
+                elif kind == 'installer_ready':
+                    self.pending_installer = value
+                    messages.append('Nova versão pronta. Feche o AutoWord para instalar e reabrir automaticamente.')
+                    self.status.set('Atualização pronta: será instalada ao fechar o aplicativo.')
                 elif kind == 'print_ready':
                     self.print_job = value
                 elif kind == 'printed':

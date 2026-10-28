@@ -1,3 +1,28 @@
+# Instalação do AutoWord no Windows
+
+Baixe **AutoWord-Setup.exe** na Release e execute uma vez. O instalador cria o
+atalho AutoWord na área de trabalho e no menu Iniciar. Python não precisa estar
+instalado. Microsoft Word continua necessário; para planilhas XLS, também Excel.
+
+A instalação é por usuário, sem exigir administrador, em
+`%LOCALAPPDATA%\Programs\AutoWord`. O ícone identifica documento conferido.
+A interface permanece simples, com a paleta clara e controles padrão.
+
+O executável verifica novas Releases em segundo plano. Depois de baixar e
+verificar o SHA-256 do instalador, avisa na tela. Feche o AutoWord para instalar
+e reabrir automaticamente. O processo aguarda o programa encerrar para substituir
+os arquivos. Sem internet, a versão instalada continua funcionando.
+
+Configurações e cadastros continuam em `%LOCALAPPDATA%\CondominioFacil`; o
+instalador não apaga essa pasta nem altera os documentos dos condomínios.
+Não abra a versão antiga por INICIAR.vbs ao mesmo tempo que o novo atalho.
+
+O ZIP de código continua disponível para instalações anteriores. O atualizador
+dessa versão não converte automaticamente uma instalação Python em executável:
+faça a primeira instalação pelo Setup. Depois use somente o atalho AutoWord.
+
+---
+
 # Condomínio Fácil 0.6.0
 
 Aplicativo local para Windows, Python 3.11 ou superior e Microsoft Word instalado e ativado. Abra **INICIAR.vbs** após extrair o ZIP para iniciar sem janela de CMD. A primeira execução pode levar alguns minutos enquanto prepara o ambiente sem abrir o CMD e instala a dependência pywin32 já usada pelo programa; a leitura de PDF usa também pypdf; o OCR é o mecanismo local do Windows. Se precisar instalar Python, use https://www.python.org/downloads/windows/ com Python Launcher e Tcl/Tk.

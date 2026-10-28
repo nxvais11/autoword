@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+import threading
 from pathlib import Path
 from updater import UpdateError,fetch,install_latest,repo_url,saved_token,store_token
 
@@ -70,7 +71,22 @@ def configure_updates(parent):
     except Exception as exc:
         messagebox.showerror('Não foi possível conectar',str(exc),parent=parent)
 
+def smoke_test():
+    # Executado no CI sem Word, rede ou acesso aos cadastros do usuário.
+    import tempfile
+    from unittest.mock import patch
+    from app import App
+    with tempfile.TemporaryDirectory() as folder:
+        root=Path(folder)
+        with patch('app.CONFIG',root/'responsaveis.json'),patch('app.MAPPINGS',root/'arquivos.json'),patch('app.DATA',root):
+            app=App()
+            app.after(400,app.destroy)
+            app.mainloop()
+    return 0
+
 def main():
+    if '--smoke-test' in sys.argv:
+        return smoke_test()
     import win32api,win32event
     from tkinter import messagebox
     handle=win32event.CreateMutex(None,False,'Local\\CondominioFacil')
@@ -79,17 +95,33 @@ def main():
             messagebox.showinfo('Condomínio Fácil','O aplicativo já está aberto.')
             return
         try:
-            status=automatic_update()
+            status='' if getattr(sys,'frozen',False) else automatic_update()
         except Exception:
             status='Atualizações indisponíveis; mantida a versão instalada.'
         from app import App
         app=App()
         app.log(status)
+        if getattr(sys,'frozen',False):
+            from executable_update import prepare_update
+            from version import VERSION
+            def check():
+                try:
+                    receipt=prepare_update(DATA,config()['repository'],VERSION)
+                    if receipt:
+                        app.events.put(('installer_ready',receipt))
+                except Exception as exc:
+                    app.events.put(('log','Atualização indisponível: '+str(exc)))
+            threading.Thread(target=check,daemon=True).start()
         app.mainloop()
+        if getattr(app,'pending_installer',None):
+            from executable_update import launch_update
+            launch_update(app.pending_installer,DATA,sys.executable)
     finally:
         win32api.CloseHandle(handle)
 
 if __name__=='__main__':
+    if '--smoke-test' in sys.argv:
+        sys.exit(smoke_test())
     try:
         main()
     except Exception as exc:
