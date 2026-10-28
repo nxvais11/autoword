@@ -205,7 +205,7 @@ class App(tk.Tk):
 
     def shortcut(self, command):
         # Não atravessa janelas modais nem dispara ações durante uma geração.
-        if not self.busy and self.grab_current() is None:
+        if not self.busy and not self.tk.call('grab','current',self._w):
             command()
         return 'break'
 
@@ -405,7 +405,7 @@ class App(tk.Tk):
         dialog.geometry(f'660x{min(590, self.winfo_screenheight()-90)}')
         dialog.transient(self)
         def hide():
-            if self.grab_current() is dialog:
+            if str(self.tk.call('grab','current',self._w)) == str(dialog):
                 dialog.grab_release()
             dialog.withdraw()
         dialog.protocol('WM_DELETE_WINDOW', hide)
@@ -842,7 +842,7 @@ class App(tk.Tk):
         self.invalidate()
 
     def watch_sheet(self):
-        if not self.busy and self.grab_current() is None:
+        if not self.busy and not self.tk.call('grab','current',self._w):
             self.auto_regenerate()
             if not self.busy:
                 self.poll_sheet()

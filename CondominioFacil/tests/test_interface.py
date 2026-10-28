@@ -229,6 +229,26 @@ class Interface(unittest.TestCase):
             window.destroy()
         self.assertFalse(self.app.busy)
 
+    def test_open_combobox_popdown_does_not_break_periodic_monitor_or_shortcuts(self):
+        from tkinter import ttk
+        combo=next(control for control,_ in self.app.controls if isinstance(control,ttk.Combobox))
+        try:
+            self.app.tk.call('ttk::combobox::Post',str(combo))
+            self.app.update()
+            current=str(self.app.tk.call('grab','current',str(self.app)))
+            self.assertIn('popdown',current)
+            with patch.object(self.app,'auto_regenerate') as automatic,patch.object(self.app,'poll_sheet') as sheet:
+                self.app.watch_sheet()
+                automatic.assert_not_called();sheet.assert_not_called()
+            called=[]
+            self.app.shortcut(lambda:called.append(True))
+            self.assertFalse(called)
+        finally:
+            self.app.tk.call('ttk::combobox::Unpost',str(combo))
+        self.app.update()
+        self.app.shortcut(lambda:called.append(True))
+        self.assertEqual(called,[True])
+
     def test_simple_theme_has_no_custom_images_or_layout_elements(self):
         from theme import COLORS
         self.assertFalse(hasattr(self.app, '_theme_images'))
