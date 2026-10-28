@@ -9,7 +9,7 @@ from executable_update import prepare_update,launch_update,ASSET,UpdateError
 
 class ExecutableUpdate(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name).resolve()
         self.binary=b'MZinstalador sintetico'
         self.sha=hashlib.sha256(self.binary).hexdigest()
         self.release={'tag_name':'v0.9.2','assets':[{'name':ASSET,'id':1,'digest':'sha256:'+self.sha}]}
