@@ -79,11 +79,11 @@ def smoke_test():
     with tempfile.TemporaryDirectory() as folder:
         root=Path(folder)
         with patch('app.CONFIG',root/'responsaveis.json'),patch('app.MAPPINGS',root/'arquivos.json'),patch('app.DATA',root):
-            app=App()
-            from central_ui import CentralDialog,save_settings
+            from central_ui import save_settings
             from central_service import DEFAULTS
             save_settings(root/'central.json',dict(DEFAULTS,root=str(root),statements=str(root),reports=str(root)))
-            central=CentralDialog(app,root/'central.json')
+            app=App()
+            assert app.workspace_active and app.central_panel.winfo_exists()
             import pypdfium2 as pdfium
             with pdfium.PdfDocument.new() as document:
                 page=document.new_page(100,100)

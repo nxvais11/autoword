@@ -22,7 +22,7 @@ CONFIG = DATA/'responsaveis.json'
 MAPPINGS = DATA/'arquivos.json'
 
 class App(tk.Tk):
-    def __init__(self):
+    def __init__(self,start_central=True):
         super().__init__()
         self.style = apply_theme(self)
         icon = Path(__file__).with_name('autoword.ico')
@@ -88,10 +88,12 @@ class App(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.after(100, self.poll)
         self.after(3000, self.watch_sheet)
+        if start_central:self.open_central()
 
     def build_interface(self):
         top = ttk.Frame(self, padding=16)
         top.pack(fill='both', expand=True)
+        self.batch_view=top
         top.columnconfigure(0, weight=1)
         top.rowconfigure(5, weight=1)
         header = ttk.Frame(top)
@@ -99,10 +101,10 @@ class App(tk.Tk):
         title = ttk.Frame(header)
         title.pack(side='left')
         ttk.Label(title, text='AutoWord', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(title, text='Documentos dos condomínios',
+        ttk.Label(title, text='Atualização em lote',
                   style='Muted.TLabel').pack(anchor='w', pady=(3, 0))
         self.button(header, 'Opções', self.options_dialog).pack(side='right')
-        self.button(header, 'Central de impressão', self.open_central).pack(side='right', padx=8)
+        self.button(header, 'Voltar à Central', self.open_central).pack(side='right', padx=8)
 
         card = ttk.Frame(top, style='Card.TFrame', padding=12)
         card.grid(row=1, column=0, sticky='ew')
@@ -200,8 +202,8 @@ class App(tk.Tk):
         log_scroll.pack(side='right', fill='y')
         self.logbox.configure(yscrollcommand=log_scroll.set)
         self.bind('<Control-o>', lambda event: self.shortcut(self.choose_root))
-        self.bind('<Control-Return>', lambda event: self.shortcut(self.run_generation))
-        self.bind('<F1>', lambda event: self.shortcut(self.options_dialog))
+        self.bind('<Control-Return>', lambda event: self.shortcut(self.central_panel.update_selected if getattr(self,'workspace_active',False) else self.run_generation))
+        self.bind('<F1>', lambda event: self.shortcut(self.central_panel.configure_paths if getattr(self,'workspace_active',False) else self.options_dialog))
 
     def shortcut(self, command):
         # Não atravessa janelas modais nem dispara ações durante uma geração.
@@ -380,12 +382,27 @@ class App(tk.Tk):
 
     def open_central(self):
         if self.busy:return
-        from central_ui import CentralDialog
-        window=getattr(self,'central_window',None)
-        if window is not None and window.winfo_exists():
-            window.lift();window.grab_set();return
-        try:self.central_window=CentralDialog(self,DATA/'central.json')
-        except Exception as exc:messagebox.showerror('Central de impressão',str(exc),parent=self)
+        from central_ui import CentralPanel
+        try:
+            panel=getattr(self,'central_panel',None)
+            if panel is None:
+                self.central_panel=panel=CentralPanel(self,DATA/'central.json')
+            elif not getattr(self,'workspace_active',False):panel.reload()
+            self.batch_view.pack_forget()
+            panel.pack(fill='both',expand=True)
+            self.workspace_active=True
+        except Exception as exc:messagebox.showerror('Central',str(exc),parent=self)
+
+    def show_batch(self):
+        if self.busy:return
+        panel=getattr(self,'central_panel',None)
+        if panel:
+            panel.pack_forget()
+            self.destination.set(panel.settings.get('destination',''))
+            self.create_subfolder.set(panel.settings.get('create_subfolder',False))
+            for k,v in enumerate(self.doc_choices):v.set(k in panel.settings.get('update_kinds',range(4)))
+        self.batch_view.pack(fill='both',expand=True)
+        self.workspace_active=False
 
     def central_settings(self):
         from central_ui import settings_dialog
@@ -506,6 +523,13 @@ class App(tk.Tk):
                 elif kind == 'printed':
                     self.completion_message = value
                     messages.append(value)
+                elif kind == 'central_done':
+                    if self.state_dirty:self.save_runtime_state()
+                    if self.pending_sheet is not None:
+                        update,self.pending_sheet=self.pending_sheet,None
+                        self.after_idle(lambda v=update:self.accept_sheet_update(*v))
+                    if self.sheet_monitor and self.sheet_monitor.raw_hash is None and not self.sheet_polling:
+                        self.after_idle(self.poll_sheet)
                 elif kind == 'output':
                     self.output = value
                     messages.append(f'Saída: {value}')

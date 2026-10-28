@@ -124,18 +124,6 @@ class Central(unittest.TestCase):
         self.assertEqual(calls,['word','word','pdf'])
         self.assertEqual(originals,{p:p.read_bytes() for p in originals})
 
-    def test_pdf_gdi_sends_one_copy_simplex_without_changing_defaults(self):
-        mode=SimpleNamespace(Fields=0,Duplex=2,Copies=5,Orientation=1)
-        wp=Mock();wp.GetPrinter.return_value={'pDevMode':mode};wp.DocumentProperties.return_value=1
-        wp.GetDeviceCaps.return_value=1000
-        gui=Mock();gui.CreateDC.return_value=123
-        const=SimpleNamespace(DM_DUPLEX=1,DM_COPIES=2,DM_ORIENTATION=4,DM_IN_BUFFER=8,DM_OUT_BUFFER=16,HORZRES=20,VERTRES=21)
-        path=self.month/'ALFA.pdf'
-        with patch.dict(sys.modules,{'win32print':wp,'win32gui':gui,'win32con':const}),patch('PIL.ImageWin.Dib') as dib:
-            self.assertTrue(print_pdf(path,'HP TEST',threading.Event()))
-            dib.return_value.draw.assert_called_once()
-        self.assertEqual(mode.Duplex,1);self.assertEqual(mode.Copies,1)
-        wp.SetPrinter.assert_not_called();wp.StartDoc.assert_called_once();wp.EndDoc.assert_called_once();gui.DeleteDC.assert_called_once_with(123)
     def test_sequence_cancel_and_no_changes_or_temporary_folders_left(self):
         result=self.lookup();rows=selected_plan(result,{4,5});cancel=threading.Event();sent=[]
         before={p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()}

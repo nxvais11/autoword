@@ -8,7 +8,8 @@ from pypdf import PdfReader
 from word_service import discover,digest,print_layout,document_kind,filename_key,CLOSING_FOLDERS
 
 DEFAULTS={'root':r'Z:\_CONDOMÍNIOS ATIVOS','statements':r'Z:\OFX E EXTRATOS','reports':'',
-          'main_printer':'','report_printer':'','include_report':False,'overrides':{}}
+          'main_printer':'','report_printer':'','include_report':False,'overrides':{},
+          'update_kinds':[0,1,2,3],'destination':'','create_subfolder':False}
 ORDER=(1,0,2,3)
 LABELS=('Aprovação de contas','Capa do livro','Anexo I','Anexo II')
 
@@ -93,8 +94,8 @@ def compare_reports(word,pdf,source,workspace):
     result['hashes']=before
     return result
 
-def search(settings,name,month,year,mappings=None):
-    names=catalog(settings)
+def search(settings,name,month,year,mappings=None,names=None):
+    names=catalog(settings) if names is None else list(names)
     if name not in names:raise ValueError('Condomínio não encontrado na pasta principal configurada.')
     home=Path(settings['root'])/name
     overrides=settings.get('overrides',{}).get(name,{})
