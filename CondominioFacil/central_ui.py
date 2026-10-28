@@ -5,6 +5,7 @@ import os
 import queue
 import tempfile
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk,filedialog,messagebox
@@ -14,6 +15,7 @@ from obligations import check_obligations
 from word_service import Word,discover
 from central_update import prepare_closing,closing_condo,run_update
 from print_service import available_printers
+from book_history import BookHistory,file_id
 
 
 def load_settings(path):
@@ -112,6 +114,8 @@ class CentralView:
     def build(self,parent,path,embedded=False):
         self.embedded=embedded
         self.parent=parent;self.path=Path(path);self.settings=load_settings(path)
+        self.history=BookHistory(self.path.with_name('livros.json'))
+        self.operation=None;self.print_request=[]
         self.external_busy=False
         self.result=None;self.comparison=None;self.checked=set();self.busy=False;self.events=queue.Queue();self.cancel=parent.cancel
         if not embedded:
@@ -125,6 +129,7 @@ class CentralView:
         header=ttk.Frame(body);header.grid(row=0,column=0,sticky='ew',pady=(0,10))
         ttk.Label(header,text='AutoWord',style='Title.TLabel').pack(side='left')
         self.action(header,'Opções',self.configure_paths).pack(side='right')
+        self.action(header,'Controle mensal',self.monthly_control).pack(side='right',padx=8)
         self.action(header,'Atualização em lote',self.open_batch).pack(side='right',padx=8)
         row=ttk.Frame(body);row.grid(row=1,column=0,sticky='ew')
         ttk.Label(row,text='Condomínio').pack(side='left')
@@ -135,7 +140,10 @@ class CentralView:
         self.year_box=ttk.Spinbox(row,textvariable=self.year,from_=2000,to=2099,width=6);self.year_box.pack(side='left')
         self.controls.extend([self.names,self.month_box,self.year_box])
         self.action(row,'Buscar arquivos',self.query).pack(side='left',padx=8)
-        ttk.Label(body,text='☐ Não imprimir    ☑ Imprimir  •  Clique na caixinha para escolher. Todos os extratos começam marcados.',style='Muted.TLabel').grid(row=2,column=0,sticky='w',pady=8)
+        self.book_status=tk.StringVar(value='Pendente')
+        legend=ttk.Frame(body);legend.grid(row=2,column=0,sticky='ew',pady=8)
+        ttk.Label(legend,textvariable=self.book_status,style='Section.TLabel').pack(side='right')
+        ttk.Label(legend,text='☐ Não imprimir    ☑ Imprimir  •  Clique na caixinha para escolher. Recentes aparecem primeiro na lista.',style='Muted.TLabel').pack(side='left')
         host=ttk.Frame(body);host.grid(row=3,column=0,sticky='nsew')
         self.tree=ttk.Treeview(host,columns=('check','group','file','printer'),show='headings',selectmode='browse')
         for key,title,width in [('check','Imprimir',85),('group','Documento / ordem',195),('file','Arquivo',460),('printer','Impressora',280)]:
@@ -188,6 +196,7 @@ class CentralView:
         if self.busy or self.parent.busy:return
         self.result=None;self.comparison=None;self.checked.clear();self.tree.delete(*self.tree.get_children());self.version.set('pdf')
         self.status.set('Clique em Buscar arquivos para a seleção atual.')
+        self.refresh_book_status()
 
     def configure_paths(self):
         if not self.busy and not self.parent.busy:
@@ -222,10 +231,29 @@ class CentralView:
         self.busy=True;self.parent.busy=True;self.cancel.clear()
         for widget in self.controls:widget.configure(state='disabled')
         self.cancel_button.configure(state='normal');self.status.set('Processando…')
+        tracking=None
+        if kind=='printed' and self.result:
+            tracking=dict(root=self.settings['root'],name=self.result['name'],period=self.result['period'],words=0,sent=[],attempt=[],planned=list(self.print_request))
+            self.operation=tracking
         def worker():
-            try:self.events.put((kind,work()))
-            except Exception as exc:self.events.put(('error',str(exc)))
-            finally:self.events.put(('done',None))
+            started=time.monotonic();error='';result=None
+            try:result=work()
+            except Exception as exc:error=str(exc)
+            if tracking is not None:
+                seconds=time.monotonic()-started
+                try:self.history.finish(tracking['root'],tracking['name'],tracking['period'],seconds,error)
+                except Exception as exc:error+='\nNão foi possível salvar o controle: '+str(exc)
+                confirmed={file_id(r) for r in tracking['sent']}
+                pending=[r['label'] for r in tracking['planned'] if file_id(r) not in confirmed]
+                lines=[f"{tracking['name']} — {tracking['period']}",f"Words verificados/atualizados: {tracking['words']}",f"Envios confirmados: {len(tracking['sent'])}",f"Tempo da operação: {seconds:.1f} s"]
+                if tracking['sent']:lines.append('Enviados: '+', '.join(r['label'] for r in tracking['sent']))
+                if pending:lines.append('Pendentes/sem confirmação: '+', '.join(pending))
+                lines.append('Confira a saída física antes de concluir o livro no Controle mensal.')
+                if error:lines.append(error)
+                elif result:lines.append(str(result))
+                result='\n'.join(lines)
+            self.events.put(('error' if error else kind,result if tracking is not None else error if error else result))
+            self.events.put(('done',None))
         threading.Thread(target=worker,daemon=False).start()
 
     def poll(self):
@@ -242,22 +270,31 @@ class CentralView:
                 kind,value=self.events.get_nowait()
                 if kind=='workspace':
                     self.parent.apply_discovered(value['root'],value['condos'])
-                    self.names.configure(values=value['names'])
+                    self.names.configure(values=self.history.ordered_names(self.settings['root'],value['names']))
                     if self.name.get() not in value['names']:self.name.set('')
                     self.status.set('Selecione condomínio e competência para atualizar ou imprimir.')
+                    if getattr(self,'query_after_reload',False) and self.name.get():
+                        self.query_after_reload=False;self.after_idle(self.query)
                 elif kind=='catalog':
-                    self.names.configure(values=value)
+                    self.names.configure(values=self.history.ordered_names(self.settings['root'],value))
                     current=self.parent.selected()
                     candidate=current[0]['name'] if len(current)==1 else self.name.get()
                     if candidate in value:self.name.set(candidate)
                     self.status.set('Selecione o nome do condomínio e busque os arquivos.')
                 elif kind=='search':
+                    self.history.touch(self.settings['root'],value['name'])
+                    self.names.configure(values=self.history.ordered_names(self.settings['root'],self.names.cget('values')))
+                    self.refresh_book_status()
                     self.result=value;self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
                     self.redraw();self.show_details('\n'.join(value['warnings']) or 'Arquivos localizados. Selecione o que deseja imprimir.')
                     self.status.set('Extratos: todos selecionados por padrão. Obrigações são opcionais e exigem conferência.')
                     if value.get('due_notice'):
                         self.status.set('Atenção: há obrigações previstas nesta competência.')
                         messagebox.showwarning('Revisar obrigações — '+value['name'],value['due_notice'],parent=self)
+                elif kind=='duplicates':
+                    text,answer,ready=value
+                    answer.append(messagebox.askyesno('Possível impressão repetida',text,parent=self))
+                    ready.set()
                 elif kind=='comparison':
                     self.comparison=value;self.version.set('pdf' if value['equal'] else '');self.redraw();self.show_details(value['diff']);self.status.set('Textos equivalentes: será usado o PDF pessoal.' if value['equal'] else 'Há diferenças. Confira e escolha PDF pessoal ou Word atual antes de imprimir.')
                 elif kind=='updated':
@@ -272,6 +309,7 @@ class CentralView:
                     self.busy=False;self.parent.busy=False
                     for widget in self.controls:widget.configure(state='normal')
                     self.names.configure(state='readonly');self.month_box.configure(state='readonly');self.cancel_button.configure(state='disabled')
+                    self.refresh_book_status()
                     self.parent.events.put(('central_done',None))
         except queue.Empty:pass
         if self.winfo_exists():self.poll_callback=self.after(100,self.poll)
@@ -406,12 +444,15 @@ class CentralView:
         except Exception as exc:messagebox.showerror('Atualização',str(exc),parent=self);return
         if not messagebox.askyesno('Atualizar e imprimir' if printing else 'Só atualizar',summary+'\n\nContinuar?',parent=self):return
         self.parent.state_dirty=True
+        self.print_request=rows or []
         def work():
             def generated(c,t,d):self.parent.record_job(c,t,d,month,year)
             def updated(value):
+                self.history.updated(settings['root'],result['name'],result['period'],value['updated_kinds'])
+                if self.operation is not None:self.operation['words']=len(value['updated_kinds'])
                 self.events.put(('updated',value));self.parent.events.put(('output',Path(value['output'])))
             value,count=run_update(result,settings,month,year,state,self.cancel,
-                lambda text:self.events.put(('log',text)),print_rows=rows,on_generated=generated,on_updated=updated,word_factory=Word)
+                lambda text:self.events.put(('log',text)),print_rows=rows,on_generated=generated,on_updated=updated,word_factory=Word,printer=self.tracked_print)
             if self.cancel.is_set():return 'Operação cancelada. Nenhum reenvio automático de impressão.'
             return (f'Atualização concluída. {count}/{len(rows)} documento(s) enviado(s) à impressão.' if rows is not None else
                     'Atualização concluída. Nenhum documento enviado à impressora.')
@@ -438,10 +479,86 @@ class CentralView:
             summary='\n'.join(f"{i+1}. {row['label']} ({Path(row['path']).name}) → {row['printer']}" for i,row in enumerate(rows))
         except Exception as exc:messagebox.showerror('Impressão',str(exc),parent=self);return
         if not messagebox.askyesno('Confirmar impressão',summary+'\n\nUma cópia, somente frente. Enviar estes documentos?',parent=self):return
+        self.print_request=rows
         def work():
-            count=execute_plan(rows,self.cancel,lambda text:self.events.put(('log',text)),Word)
+            count=self.tracked_print(rows,self.cancel,lambda text:self.events.put(('log',text)),Word)
             return f'{count}/{len(rows)} documento(s) enviado(s). Confira a fila das impressoras; não há repetição automática em caso de falha.'
         self.run(work,'printed')
+
+    def refresh_book_status(self):
+        try:
+            name,month,year=self.context()
+            book=self.history.get(self.settings['root'],name,f'{year}-{month:02}')
+            self.book_status.set(self.history.status(book))
+        except (ValueError,AttributeError):pass
+
+    def tracked_print(self,rows,cancel,log,word_factory):
+        tracking=self.operation
+        if tracking is None:raise ValueError('Controle da operação não inicializado.')
+        tracking['planned']=rows
+        duplicates=self.history.duplicates(tracking['root'],tracking['name'],tracking['period'],rows)
+        if duplicates:
+            ready=threading.Event();answer=[]
+            text='Estes arquivos já foram enviados ou tiveram envio sem confirmação nesta competência:\n\n'+'\n'.join(r['label'] for r in duplicates)+'\n\nConfira a fila e as folhas. Deseja enviar novamente?'
+            self.events.put(('duplicates',(text,answer,ready)))
+            while not ready.wait(.1):
+                if cancel.is_set():return 0
+            if not answer or not answer[0]:return 0
+        def event(kind,row):
+            self.history.print_event(tracking['root'],tracking['name'],tracking['period'],kind,row)
+            tracking['sent' if kind=='sent' else 'attempt'].append(copy.deepcopy(row))
+        return execute_plan(rows,cancel,log,word_factory,on_event=event)
+
+    def monthly_control(self):
+        if self.busy or self.parent.busy:return
+        try:
+            _,month,year=self.context();period=f'{year}-{month:02}'
+        except ValueError:return
+        names=list(self.names.cget('values'));root=self.settings['root']
+        dialog=tk.Toplevel(self);dialog.title('Controle mensal — '+period);dialog.transient(self.winfo_toplevel());dialog.grab_set();dialog.geometry('780x530')
+        body=ttk.Frame(dialog,padding=16);body.pack(fill='both',expand=True)
+        total=tk.StringVar(master=dialog)
+        ttk.Label(body,textvariable=total,style='Section.TLabel').pack(anchor='w',pady=(0,8))
+        host=ttk.Frame(body);host.pack(fill='both',expand=True)
+        tree=ttk.Treeview(host,columns=('name','status','words','sent'),show='headings',selectmode='browse')
+        for key,label,width in [('name','Condomínio',270),('status','Situação',190),('words','Words',75),('sent','Envios confirmados',160)]:
+            tree.heading(key,text=label);tree.column(key,width=width)
+        tree.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(host,command=tree.yview);scroll.pack(side='right',fill='y');tree.configure(yscrollcommand=scroll.set)
+        def redraw():
+            selected=tree.selection();tree.delete(*tree.get_children())
+            for i,name in enumerate(names):
+                b=self.history.get(root,name,period)
+                tree.insert('','end',iid=str(i),values=(name,self.history.status(b),len(b.get('updated',[])),sum(v['state']=='sent' for v in b.get('sent',{}).values())))
+            if selected:tree.selection_set(selected)
+            totals=self.history.totals(root,names,period)
+            text=f"{totals['complete']}/{totals['total']} livros concluídos · Tempo das operações: {totals['seconds']/60:.1f} min"
+            if totals['saving'] is not None:text+=f" · Economia estimada ({totals['saving_count']} livros): {totals['saving']/60:.1f} min"
+            total.set(text)
+        def chosen():
+            return names[int(tree.selection()[0])] if tree.selection() else None
+        def complete(value):
+            name=chosen()
+            if name and messagebox.askyesno('Concluir livro' if value else 'Reabrir livro',f'{name} — {period}\n'+('Você conferiu as folhas e terminou a montagem do livro?' if value else 'Retirar a confirmação de conclusão deste livro?'),parent=dialog):
+                self.history.complete(root,name,period,value);redraw();self.refresh_book_status()
+        def open_selected():
+            name=chosen()
+            if name:
+                dialog.destroy();self.name.set(name);self.query()
+        actions=ttk.Frame(body);actions.pack(fill='x',pady=10)
+        ttk.Button(actions,text='Abrir condomínio',command=open_selected).pack(side='left')
+        ttk.Button(actions,text='Concluir livro',command=lambda:complete(True)).pack(side='left',padx=8)
+        ttk.Button(actions,text='Reabrir',command=lambda:complete(False)).pack(side='left')
+        row=ttk.Frame(body);row.pack(fill='x')
+        ttk.Label(row,text='Seu tempo manual por livro (min):').pack(side='left')
+        baseline=tk.StringVar(master=dialog,value='' if self.history.data.get('manual_minutes') is None else str(self.history.data['manual_minutes']))
+        ttk.Entry(row,textvariable=baseline,width=8).pack(side='left',padx=6)
+        def save_baseline():
+            try:self.history.set_baseline(float(baseline.get().replace(',','.')) if baseline.get().strip() else None);redraw()
+            except ValueError as exc:messagebox.showerror('Tempo manual',str(exc),parent=dialog)
+        ttk.Button(row,text='Salvar referência',command=save_baseline).pack(side='left')
+        ttk.Label(body,text='Economia é uma estimativa dos livros concluídos, usando sua referência manual.\nTempo da operação não mede exatamente sua atenção. Envio à fila não confirma impressão física.',style='Muted.TLabel',wraplength=730).pack(anchor='w',pady=8)
+        redraw()
 
     def destroy(self):
         if hasattr(self,'poll_callback'):self.after_cancel(self.poll_callback)

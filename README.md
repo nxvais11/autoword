@@ -90,3 +90,24 @@ fila. O arquivo pode já ter sido enviado: não existe repetição automática. 
 precisa ser validada no computador do usuário, inclusive letras nas bordas das tabelas.
 
 Arquivos de exemplo e caminhos pessoais reais não são publicados.
+
+## Controle mensal e histórico local
+
+Controle mensal mostra Pendente, Atualizado, Enviado à impressão, Revisar envio e
+Concluído por condomínio e competência. Concluir livro é uma confirmação manual de
+conferência das folhas e montagem; envio à fila nunca significa conclusão física.
+Atualizações em lote e automáticas também retiram a confirmação de conclusão.
+
+O resumo da Central apresenta Words processados, arquivos enviados, pendências e
+tempo da operação, inclusive em falhas parciais. Cada tentativa é registrada antes
+do envio e marcada como confirmada após sucesso. Arquivos idênticos já enviados ou
+com confirmação incerta exigem confirmação antes de repetir; versões alteradas não
+são consideradas duplicatas. Não há reenvio automático. O registro local não é uma
+garantia da fila nem impede impressões realizadas fora do aplicativo.
+
+Recentes aparecem primeiro na lista de condomínios. O controle e os tempos ficam em
+livros.json na configuração local do AutoWord, sem relatórios nas pastas da rede.
+Tempo medido é o tempo das operações da Central, incluindo espera durante o envio,
+e não mede exatamente atenção humana ou impressão física. Economia só é estimada
+quando o usuário fornece seu tempo manual de referência e conclui livros com
+operações registradas. Repetições não contam como novos livros.

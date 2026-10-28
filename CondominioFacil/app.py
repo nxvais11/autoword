@@ -176,7 +176,7 @@ class App(tk.Tk):
         self.generate_button = self.button(actions, 'Atualizar documentos', self.run_generation)
         self.generate_button.configure(style='Primary.TButton')
         self.generate_button.pack(side='left')
-        self.print_button = ttk.Button(actions, text='Imprimir', command=self.print_dialog, state='disabled')
+        self.print_button = ttk.Button(actions, text='Imprimir', command=self.open_central_selected, state='disabled')
         self.print_button.pack(side='left', padx=(8, 0))
         self.button(actions, 'Conferir (opcional)', self.inspect).pack(side='left', padx=8)
         self.cancel_button = ttk.Button(actions, text='Cancelar', command=self.cancel.set, state='disabled')
@@ -395,6 +395,18 @@ class App(tk.Tk):
             self.workspace_active=True
         except Exception as exc:messagebox.showerror('Central',str(exc),parent=self)
 
+    def open_central_selected(self):
+        selected=self.selected()
+        if len(selected)!=1:
+            messagebox.showinfo('Impressão','Selecione apenas um condomínio.');return
+        self.open_central()
+        panel=getattr(self,'central_panel',None)
+        if panel:
+            panel.name.set(selected[0]['name'])
+            panel.query_after_reload=True
+            if not panel.busy:
+                panel.query_after_reload=False;panel.query()
+
     def show_batch(self):
         if self.busy:return
         panel=getattr(self,'central_panel',None)
@@ -538,6 +550,12 @@ class App(tk.Tk):
                 elif kind == 'job':
                     folder, job = value
                     self.last_jobs[folder] = job
+                    panel=getattr(self,'central_panel',None)
+                    if panel is not None:
+                        try:
+                            panel.history.updated(panel.settings['root'],job['condo']['name'],f"{job['year']}-{job['month']:02}",job['kinds'])
+                            panel.refresh_book_status()
+                        except Exception as exc:messages.append('Controle mensal: '+str(exc))
                     self.preview.pop(folder,None)
                     for index,condo in enumerate(self.condos):
                         if condo['folder']==folder:
