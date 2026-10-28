@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 def file_id(row):
-    return row.get('key',str(Path(row['path']).resolve()).casefold())+'|'+row['sha256' if 'sha256' in row else 'hash']
+    key=row['key'] if 'key' in row else str(Path(row['path']).resolve()).casefold()
+    return key+'|'+row['sha256' if 'sha256' in row else 'hash']
 
 
 class BookHistory:
@@ -21,6 +22,12 @@ class BookHistory:
         key=str(root)
         if key not in self.roots:self.roots[key]=str(Path(root).resolve()).casefold()
         return self.roots[key]
+    def prepare_root(self,root):
+        # Executado na carga em segundo plano, nunca durante a montagem da janela.
+        with self.lock:return self._root(root)
+    def root_ready(self,root):
+        # Uma leitura do cache não aguarda a thread que pode estar consultando a rede.
+        return str(root) in self.roots
     def _key(self,root,name,period):return json.dumps([self._root(root),name,period],ensure_ascii=False)
     def _book(self,root,name,period):
         return self.data['books'].setdefault(self._key(root,name,period),dict(name=name,period=period,root=self._root(root),updated=[],sent={},complete=False,seconds=0,operations=0))

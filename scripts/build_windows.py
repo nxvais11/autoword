@@ -31,6 +31,7 @@ def check_executable(exe):
     result=subprocess.run([str(exe),'--smoke-test','--smoke-report',str(report)],timeout=60)
     if result.returncode:
         raise RuntimeError(report.read_text(encoding='utf-8') if report.exists() else f'Falha ao abrir o executável: {result.returncode}')
+    if report.exists():print(report.read_text(encoding='utf-8'))
 
 def build(version):
     icon(APP/'autoword.ico')

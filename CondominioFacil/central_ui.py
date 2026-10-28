@@ -206,6 +206,7 @@ class CentralView:
         self.settings=load_settings(self.path);self.invalidate()
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
         def work():
+            self.history.prepare_root(settings['root'])
             names=catalog(settings)
             if not self.embedded:return names
             condos=[c for c in discover(settings['root'],mappings) if c['name'] in names] if names else []
@@ -488,6 +489,10 @@ class CentralView:
     def refresh_book_status(self):
         try:
             name,month,year=self.context()
+            if not name:
+                self.book_status.set('');return
+            if not self.history.root_ready(self.settings['root']):
+                self.book_status.set('Carregando…');return
             book=self.history.get(self.settings['root'],name,f'{year}-{month:02}')
             self.book_status.set(self.history.status(book))
         except (ValueError,AttributeError):pass

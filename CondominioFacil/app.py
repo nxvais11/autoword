@@ -23,6 +23,7 @@ MAPPINGS = DATA/'arquivos.json'
 
 class App(tk.Tk):
     def __init__(self,start_central=True):
+        started=time.perf_counter()
         super().__init__()
         self.style = apply_theme(self)
         icon = Path(__file__).with_name('autoword.ico')
@@ -90,7 +91,10 @@ class App(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.after(100, self.poll)
         self.after(3000, self.watch_sheet)
-        if start_central:self.open_central()
+        if start_central:
+            self.open_central()
+            self.update_idletasks()
+        self.startup_seconds=time.perf_counter()-started
 
     def build_interface(self):
         top = ttk.Frame(self, padding=16)

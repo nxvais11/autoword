@@ -90,6 +90,8 @@ def smoke_test():
             save_settings(root/'central.json',dict(DEFAULTS,root=str(root),statements=str(root),reports=str(root)))
             app=App()
             assert app.workspace_active and app.central_panel.winfo_exists()
+            if '--smoke-report' in sys.argv:
+                Path(sys.argv[sys.argv.index('--smoke-report')+1]).write_text(f'Interface pronta em {app.startup_seconds:.3f} s',encoding='utf-8')
             import pypdfium2 as pdfium
             with pdfium.PdfDocument.new() as document:
                 page=document.new_page(100,100)

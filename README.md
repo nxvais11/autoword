@@ -111,3 +111,13 @@ Tempo medido é o tempo das operações da Central, incluindo espera durante o e
 e não mede exatamente atenção humana ou impressão física. Economia só é estimada
 quando o usuário fornece seu tempo manual de referência e conclui livros com
 operações registradas. Repetições não contam como novos livros.
+
+## Inicialização
+
+A janela abre antes de consultar a pasta da rede. O caminho canônico usado pelo
+controle mensal é preparado no carregamento em segundo plano, preservando os
+mesmos identificadores do histórico. A biblioteca de leitura de PDFs só é importada
+quando um PDF é lido. Os testes verificam que a montagem da Central não resolve
+caminhos de rede na thread da interface. O teste do executável instalado também
+registra o tempo de construção da interface; esse valor não inclui toda a partida
+do processo nem o tempo de acesso à rede no computador do usuário.
