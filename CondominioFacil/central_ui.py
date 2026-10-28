@@ -90,12 +90,13 @@ class CentralDialog(tk.Toplevel):
         super().__init__(parent)
         self.parent=parent;self.path=Path(path);self.settings=load_settings(path)
         self.result=None;self.comparison=None;self.checked=set();self.busy=False;self.events=queue.Queue();self.cancel=parent.cancel
-        self.title('Central de impressão por condomínio');self.geometry('1080x680');self.minsize(900,580)
+        self.title('Central de impressão por condomínio');self.geometry(f'1080x{min(680,self.winfo_screenheight()-100)}');self.minsize(900,580)
         self.transient(parent);self.grab_set()
         self.name=tk.StringVar();self.month=tk.StringVar(value=parent.month.get());self.year=tk.StringVar(value=parent.year.get())
         self.version=tk.StringVar(value='pdf');self.status=tk.StringVar(value='Carregando nomes dos condomínios…')
         body=ttk.Frame(self,padding=16);body.pack(fill='both',expand=True)
-        row=ttk.Frame(body);row.pack(fill='x')
+        body.columnconfigure(0,weight=1);body.rowconfigure(2,weight=1)
+        row=ttk.Frame(body);row.grid(row=0,column=0,sticky='ew')
         ttk.Label(row,text='Condomínio').pack(side='left')
         self.names=ttk.Combobox(row,textvariable=self.name,state='readonly',width=38);self.names.pack(side='left',padx=8)
         from engine import MONTHS
@@ -105,28 +106,28 @@ class CentralDialog(tk.Toplevel):
         self.controls=[self.names,self.month_box,self.year_box]
         self.action(row,'Buscar arquivos',self.query).pack(side='left',padx=8)
         self.action(row,'Configurações',self.configure_paths).pack(side='right')
-        ttk.Label(body,text='Marque os documentos na primeira coluna. Todos os extratos encontrados entram selecionados.',style='Muted.TLabel').pack(anchor='w',pady=10)
-        host=ttk.Frame(body);host.pack(fill='both',expand=True)
+        ttk.Label(body,text='Marque os documentos na primeira coluna. Todos os extratos encontrados entram selecionados.',style='Muted.TLabel').grid(row=1,column=0,sticky='w',pady=10)
+        host=ttk.Frame(body);host.grid(row=2,column=0,sticky='nsew')
         self.tree=ttk.Treeview(host,columns=('check','group','file','printer'),show='headings',selectmode='browse')
         for key,title,width in [('check','Imprimir',65),('group','Documento / ordem',195),('file','Arquivo',460),('printer','Impressora',280)]:
             self.tree.heading(key,text=title);self.tree.column(key,width=width,minwidth=50,stretch=key in ('file','printer'))
         self.tree.pack(side='left',fill='both',expand=True);scroll=ttk.Scrollbar(host,command=self.tree.yview);scroll.pack(side='right',fill='y');self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<Button-1>',self.click);self.tree.bind('<space>',self.toggle)
-        row=ttk.Frame(body);row.pack(fill='x',pady=10)
+        row=ttk.Frame(body);row.grid(row=3,column=0,sticky='ew',pady=10)
         self.action(row,'Todos os extratos',lambda:self.check_statements(True)).pack(side='left')
         self.action(row,'Desmarcar extratos',lambda:self.check_statements(False)).pack(side='left',padx=6)
         self.action(row,'Abrir arquivo',self.open_file).pack(side='left',padx=6)
         self.action(row,'Vincular arquivo…',self.link).pack(side='left',padx=6)
         self.action(row,'Vincular Word Jurídico…',lambda:self.link(True)).pack(side='left')
-        row=ttk.Frame(body);row.pack(fill='x',pady=4)
+        row=ttk.Frame(body);row.grid(row=4,column=0,sticky='ew',pady=4)
         self.action(row,'Comparar obrigações',self.compare).pack(side='left')
         self.action(row,'Abrir Word Jurídico',lambda:self.open_file(True)).pack(side='left',padx=6)
         self.action(row,'Conferi manualmente',self.manual_review).pack(side='left')
         self.pdf_radio=ttk.Radiobutton(row,text='Usar PDF pessoal',variable=self.version,value='pdf',command=self.redraw);self.pdf_radio.pack(side='left',padx=10)
         self.word_radio=ttk.Radiobutton(row,text='Usar Word atual',variable=self.version,value='word',command=self.redraw);self.word_radio.pack(side='left')
         self.controls.extend((self.pdf_radio,self.word_radio))
-        self.details=tk.Text(body,height=5,wrap='word',state='disabled',font=('Segoe UI',10));self.details.pack(fill='x',pady=6)
-        footer=ttk.Frame(body);footer.pack(fill='x')
+        self.details=tk.Text(body,height=5,wrap='word',state='disabled',font=('Segoe UI',10));self.details.grid(row=5,column=0,sticky='ew',pady=6)
+        footer=ttk.Frame(body);footer.grid(row=6,column=0,sticky='ew')
         ttk.Label(footer,textvariable=self.status,wraplength=740).pack(side='left',fill='x',expand=True)
         self.print_button=self.action(footer,'Imprimir selecionados',self.print_selected);self.print_button.configure(style='Primary.TButton');self.print_button.pack(side='right')
         self.cancel_button=ttk.Button(footer,text='Cancelar',command=self.cancel.set,state='disabled');self.cancel_button.pack(side='right',padx=8)
@@ -207,7 +208,8 @@ class CentralDialog(tk.Toplevel):
         if not self.result:return
         self.tree.delete(*self.tree.get_children())
         for i,row in enumerate(self.result['rows']):
-            self.tree.insert('','end',iid=str(i),values=('✓' if i in self.checked else '',row['label'],str(row['path']) if row['path'] else 'NÃO LOCALIZADO — vincule ou desmarque',row['printer']))
+            path=self.result['word'] if row['group']=='obligations' and self.version.get()=='word' else row['path']
+            self.tree.insert('','end',iid=str(i),values=('✓' if i in self.checked else '',row['label'],str(path) if path else 'NÃO LOCALIZADO — vincule ou desmarque',row['printer']))
 
     def click(self,event):
         if self.tree.identify_column(event.x)=='#1':
@@ -262,6 +264,7 @@ class CentralDialog(tk.Toplevel):
     def open_file(self,word=False):
         if not self.result:return
         path=self.result['word'] if word else self.result['rows'][int(self.tree.selection()[0])]['path'] if self.tree.selection() else None
+        if not word and self.tree.selection() and self.result['rows'][int(self.tree.selection()[0])]['group']=='obligations' and self.version.get()=='word':path=self.result['word']
         if path:
             try:os.startfile(str(path))
             except Exception as exc:messagebox.showerror('Abrir arquivo',str(exc),parent=self)
