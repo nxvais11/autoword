@@ -106,11 +106,15 @@ class CentralDialog(tk.Toplevel):
         self.controls=[self.names,self.month_box,self.year_box]
         self.action(row,'Buscar arquivos',self.query).pack(side='left',padx=8)
         self.action(row,'Configurações',self.configure_paths).pack(side='right')
-        ttk.Label(body,text='Marque os documentos na primeira coluna. Todos os extratos encontrados entram selecionados.',style='Muted.TLabel').grid(row=1,column=0,sticky='w',pady=10)
+        ttk.Label(body,text='☐ Não imprimir    ☑ Imprimir  •  Clique na caixinha para escolher. Todos os extratos começam marcados.',style='Muted.TLabel').grid(row=1,column=0,sticky='w',pady=10)
         host=ttk.Frame(body);host.grid(row=2,column=0,sticky='nsew')
         self.tree=ttk.Treeview(host,columns=('check','group','file','printer'),show='headings',selectmode='browse')
-        for key,title,width in [('check','Imprimir',65),('group','Documento / ordem',195),('file','Arquivo',460),('printer','Impressora',280)]:
+        for key,title,width in [('check','Imprimir',85),('group','Documento / ordem',195),('file','Arquivo',460),('printer','Impressora',280)]:
             self.tree.heading(key,text=title);self.tree.column(key,width=width,minwidth=50,stretch=key in ('file','printer'))
+        self.tree.column('check',anchor='center',stretch=False)
+        self.tree.tag_configure('even',background='#FFFFFF')
+        self.tree.tag_configure('odd',background='#F2F6F9')
+        self.tree.tag_configure('missing',foreground='#8B4D23')
         self.tree.pack(side='left',fill='both',expand=True);scroll=ttk.Scrollbar(host,command=self.tree.yview);scroll.pack(side='right',fill='y');self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<Button-1>',self.click);self.tree.bind('<space>',self.toggle)
         row=ttk.Frame(body);row.grid(row=3,column=0,sticky='ew',pady=10)
@@ -206,15 +210,22 @@ class CentralDialog(tk.Toplevel):
 
     def redraw(self):
         if not self.result:return
+        selected=self.tree.selection()
+        focus=self.tree.focus()
         self.tree.delete(*self.tree.get_children())
         for i,row in enumerate(self.result['rows']):
             path=self.result['word'] if row['group']=='obligations' and self.version.get()=='word' else row['path']
-            self.tree.insert('','end',iid=str(i),values=('✓' if i in self.checked else '',row['label'],str(path) if path else 'NÃO LOCALIZADO — vincule ou desmarque',row['printer']))
+            self.tree.insert('','end',iid=str(i),values=('☑' if i in self.checked else '☐',row['label'],Path(path).name if path else 'Arquivo não localizado — vincule ou desmarque',row['printer']),tags=(('even' if i%2==0 else 'odd'),)+(() if path else ('missing',)))
+        if selected and self.tree.exists(selected[0]):self.tree.selection_set(selected[0])
+        if focus and self.tree.exists(focus):self.tree.focus(focus)
 
     def click(self,event):
         if self.tree.identify_column(event.x)=='#1':
             row=self.tree.identify_row(event.y)
-            if row:self.toggle(index=int(row))
+            if row:
+                self.tree.selection_set(row);self.tree.focus(row)
+                self.toggle(index=int(row))
+                return 'break'
 
     def toggle(self,event=None,index=None):
         if self.busy or not self.result:return 'break'
