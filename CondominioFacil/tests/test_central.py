@@ -98,6 +98,23 @@ class Central(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder,patch('central_service.export_word',side_effect=export):
             comparison=compare_reports(Mock(),personal,word,folder)
         self.assertTrue(comparison['equal']);self.assertEqual(before,(personal.read_bytes(),word.read_bytes()))
+    def test_word_prints_natively_in_order_without_pdf_conversion(self):
+        result=self.lookup();rows=selected_plan(result,{0,1,4})
+        calls=[];wp=Mock();service=Mock()
+        factory=Mock();factory.return_value.__enter__=Mock(return_value=service)
+        factory.return_value.__exit__=Mock(return_value=False)
+        originals={r['path']:r['path'].read_bytes() for r in rows}
+        def native(word,receipt,printer,copies,cancel):
+            self.assertIs(word,service)
+            path=Path(receipt['files'][0]['path'])
+            self.assertEqual(path.suffix,'.doc')
+            calls.append('word');return 1
+        def pdf_send(*args):calls.append('pdf');return True
+        with patch.dict(sys.modules,{'win32print':wp}),patch('central_print.print_receipt',side_effect=native):
+            self.assertEqual(execute_plan(rows,threading.Event(),lambda text:None,factory,pdf_send),3)
+        self.assertEqual(calls,['word','word','pdf'])
+        self.assertEqual(originals,{p:p.read_bytes() for p in originals})
+
     def test_pdf_gdi_sends_one_copy_simplex_without_changing_defaults(self):
         mode=SimpleNamespace(Fields=0,Duplex=2,Copies=5,Orientation=1)
         wp=Mock();wp.GetPrinter.return_value={'pDevMode':mode};wp.DocumentProperties.return_value=1

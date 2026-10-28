@@ -2,7 +2,9 @@
 import tempfile
 from contextlib import nullcontext
 from pathlib import Path
-from central_service import export_word,verify_plan
+from central_service import verify_plan
+from print_service import print_receipt
+from word_service import digest
 
 
 def print_pdf(path,printer,cancel,log=lambda text:None):
@@ -69,24 +71,29 @@ def execute_plan(rows,cancel,log,word_factory,pdf_sender=print_pdf):
     sent=0
     with tempfile.TemporaryDirectory(prefix='autoword_impressao_') as folder:
         prepared=[]
-        manager=word_factory() if any(Path(row['path']).suffix.lower()!='.pdf' for row in rows) else nullcontext(None)
+        manager=nullcontext(None)
         with manager as word:
             for i,row in enumerate(rows):
                 if cancel.is_set():return sent
                 source=Path(row['path']);target=Path(folder)/f'{i+1:02} - {source.stem}.pdf'
-                if source.suffix.lower()=='.pdf':target.write_bytes(source.read_bytes())
-                else:export_word(word,source,target)
-                # Valida leitura/renderização antes de começar a fila física.
-                import pypdfium2 as pdfium
-                with pdfium.PdfDocument(str(target)) as doc:
-                    if not len(doc):raise ValueError('PDF sem páginas: '+source.name)
-                    page=doc[0];bitmap=page.render(scale=.25);bitmap.close();page.close()
+                target=Path(folder)/(f'{i+1:02} - '+source.name)
+                target.write_bytes(source.read_bytes())
+                if source.suffix.lower()=='.pdf':
+                    import pypdfium2 as pdfium
+                    with pdfium.PdfDocument(str(target)) as doc:
+                        if not len(doc):raise ValueError('PDF sem páginas: '+source.name)
+                        page=doc[0];bitmap=page.render(scale=.25);bitmap.close();page.close()
                 prepared.append(target)
         verify_plan(rows)
-        for row,target in zip(rows,prepared):
-            if cancel.is_set():break
-            verify_plan([row])
-            log('Enviando '+row['label']+' → '+row['printer'])
-            if not pdf_sender(target,row['printer'],cancel,log):break
-            sent+=1
+        with (word_factory() if any(p.suffix.lower()!='.pdf' for p in prepared) else nullcontext(None)) as word:
+          for row,target in zip(rows,prepared):
+              if cancel.is_set():break
+              verify_plan([row])
+              log('Enviando '+row['label']+' → '+row['printer'])
+              if target.suffix.lower()=='.pdf':
+                  if not pdf_sender(target,row['printer'],cancel,log):break
+              else:
+                  receipt={'files':[{'path':str(target),'sha256':digest(target)}]}
+                  if not print_receipt(word,receipt,row['printer'],1,cancel):break
+              sent+=1
     return sent
