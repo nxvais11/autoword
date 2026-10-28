@@ -6,7 +6,7 @@ from print_service import print_receipt
 from pdf_print import print_pdf,preflight
 
 
-def execute_plan(rows,cancel,log,word_factory,pdf_sender=None):
+def execute_plan(rows,cancel,log,word_factory,pdf_sender=None,on_event=None):
     verify_plan(rows)
     if pdf_sender is None:
         printers={row['printer'] for row in rows if Path(row['path']).suffix.lower()=='.pdf'}
@@ -32,10 +32,12 @@ def execute_plan(rows,cancel,log,word_factory,pdf_sender=None):
             verify_plan([row])
             source=Path(row['path'])
             log('Enviando '+row['label']+' → '+row['printer'])
+            if on_event:on_event('attempt',row)
             if source.suffix.lower()=='.pdf':
                 if not pdf_sender(source,row['printer'],cancel,log):break
             else:
                 receipt={'files':[{'path':str(source),'sha256':row['hash']}]}
                 if not print_receipt(word,receipt,row['printer'],1,cancel):break
+            if on_event:on_event('sent',row)
             sent+=1
     return sent

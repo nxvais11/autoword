@@ -282,7 +282,7 @@ class Interface(unittest.TestCase):
             panel,folder=self.workspace_fixture()
             panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
             panel.checked={0,1,2,3}
-            with patch('central_ui.Word',Session),patch('central_print.execute_plan',return_value=4) as printing,patch('central_ui.messagebox.askyesno',return_value=True):
+            with patch('central_ui.Word',Session),patch('central_ui.execute_plan',return_value=4) as printing,patch('central_ui.messagebox.askyesno',return_value=True):
                 panel.update_selected(True);self.wait_central(panel)
                 printing.assert_called_once()
             self.assertIn('NOVEMBRO/2026',(folder/(FILES[0]+'.doc')).read_text())
@@ -301,6 +301,37 @@ class Interface(unittest.TestCase):
         self.app.busy=False;panel.poll()
         self.assertEqual(str(panel.names.cget('state')),'readonly')
         self.assertEqual(str(panel.print_button.cget('state')),'normal')
+
+    def test_history_summary_duplicate_confirmation_and_monthly_manual_completion(self):
+        from tkinter import ttk
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result),patch('central_ui.messagebox.showerror') as error:
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
+            panel.checked={0,1}
+            def sent(rows,cancel,log,word_factory,on_event=None):
+                for row in rows:
+                    on_event('attempt',row);on_event('sent',row)
+                return len(rows)
+            with patch('central_ui.execute_plan',side_effect=sent),patch('central_ui.messagebox.askyesno',return_value=True):
+                panel.print_selected();self.wait_central(panel)
+            self.assertEqual(panel.book_status.get(),'Enviado à impressão')
+            self.assertIn('Envios confirmados: 2',panel.details.get('1.0','end'))
+            with patch('central_ui.execute_plan') as printing,patch('central_ui.messagebox.askyesno',side_effect=[True,False]) as ask:
+                panel.print_selected();self.wait_central(panel)
+                printing.assert_not_called();self.assertEqual(ask.call_count,2)
+            panel.monthly_control();self.app.update()
+            dialog=next(w for w in panel.winfo_children() if isinstance(w,tk.Toplevel))
+            def walk(widget):
+                for child in widget.winfo_children():
+                    yield child
+                    yield from walk(child)
+            tree=next(w for w in walk(dialog) if isinstance(w,ttk.Treeview))
+            tree.selection_set('0')
+            button=next(w for w in walk(dialog) if isinstance(w,ttk.Button) and w.cget('text')=='Concluir livro')
+            with patch('central_ui.messagebox.askyesno',return_value=True):button.invoke()
+            self.assertEqual(panel.book_status.get(),'Concluído')
+            self.assertEqual(tree.set('0','status'),'Concluído')
+            dialog.destroy();error.assert_not_called()
 
     def test_open_combobox_popdown_does_not_break_periodic_monitor_or_shortcuts(self):
         from tkinter import ttk
