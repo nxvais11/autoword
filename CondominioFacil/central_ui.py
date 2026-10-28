@@ -10,6 +10,7 @@ from pathlib import Path
 from tkinter import ttk,filedialog,messagebox
 from central_service import DEFAULTS,LABELS,catalog,search,compare_reports,selected_plan,digest
 from central_print import execute_plan
+from obligations import check_obligations
 from word_service import Word
 from print_service import available_printers
 
@@ -168,7 +169,7 @@ class CentralDialog(tk.Toplevel):
         except Exception as exc:messagebox.showerror('Seleção',str(exc),parent=self);return
         self.invalidate()
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
-        self.run(lambda:search(settings,name,month,year,mappings),'search')
+        self.run(lambda:check_obligations(search(settings,name,month,year,mappings),month,year),'search')
 
     def run(self,work,kind):
         if self.busy:return
@@ -195,6 +196,9 @@ class CentralDialog(tk.Toplevel):
                     self.result=value;self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
                     self.redraw();self.show_details('\n'.join(value['warnings']) or 'Arquivos localizados. Selecione o que deseja imprimir.')
                     self.status.set('Extratos: todos selecionados por padrão. Obrigações são opcionais e exigem conferência.')
+                    if value.get('due_notice'):
+                        self.status.set('Atenção: há obrigações previstas nesta competência.')
+                        messagebox.showwarning('Revisar obrigações — '+value['name'],value['due_notice'],parent=self)
                 elif kind=='comparison':
                     self.comparison=value;self.version.set('pdf' if value['equal'] else '');self.redraw();self.show_details(value['diff']);self.status.set('Textos equivalentes: será usado o PDF pessoal.' if value['equal'] else 'Há diferenças. Confira e escolha PDF pessoal ou Word atual antes de imprimir.')
                 elif kind=='printed':self.status.set(value);self.show_details(value)
