@@ -236,6 +236,8 @@ class Interface(unittest.TestCase):
         until=time.monotonic()+5
         while (window.busy or self.app.busy) and time.monotonic()<until:
             self.app.update();time.sleep(.01)
+        # A conclusão da Central é uma fila separada dos registros de geração do App.
+        self.app.poll()
         self.app.update()
         self.assertFalse(window.busy);self.assertFalse(self.app.busy)
 
