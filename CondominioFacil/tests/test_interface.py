@@ -25,7 +25,8 @@ class Interface(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.patches = [patch('app.DATA', root), patch('app.CONFIG', root/'responsaveis.json'),
-                        patch('app.MAPPINGS', root/'arquivos.json')]
+                        patch('app.MAPPINGS', root/'arquivos.json'),
+                        patch('central_ui.Word', __import__('test_central_update').Session)]
         for item in self.patches:
             item.start()
         with patch('tkinter.PhotoImage', side_effect=AssertionError('Interface simples não deve gerar imagens')):
@@ -280,12 +281,14 @@ class Interface(unittest.TestCase):
         from engine import FILES
         with patch('central_ui.check_obligations',side_effect=lambda result,*args:result),patch('central_ui.messagebox.showerror') as error:
             panel,folder=self.workspace_fixture()
-            panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
+            panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.names.event_generate('<<ComboboxSelected>>');self.wait_central(panel)
+            self.assertEqual(panel.document_period.get(),'Competência dos Words: Agosto/2026')
             panel.checked={0,1,2,3}
             with patch('central_ui.Word',Session),patch('central_ui.execute_plan',return_value=4) as printing,patch('central_ui.messagebox.askyesno',return_value=True):
                 panel.update_selected(True);self.wait_central(panel)
                 printing.assert_called_once()
             self.assertIn('NOVEMBRO/2026',(folder/(FILES[0]+'.doc')).read_text())
+            self.assertEqual(panel.document_period.get(),'Competência dos Words: Novembro/2026')
             self.assertIn(str(folder),self.app.last_jobs)
             before={p:p.read_bytes() for p in folder.iterdir()}
             with patch('central_ui.execute_plan',return_value=4) as printing,patch('central_ui.run_update') as updating,patch('central_ui.messagebox.askyesno',return_value=True):

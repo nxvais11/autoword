@@ -121,3 +121,14 @@ quando um PDF é lido. Os testes verificam que a montagem da Central não resolv
 caminhos de rede na thread da interface. O teste do executável instalado também
 registra o tempo de construção da interface; esse valor não inclui toda a partida
 do processo nem o tempo de acesso à rede no computador do usuário.
+
+## Competência atual dos Words
+
+Ao selecionar o condomínio, a Central consulta automaticamente os fechamentos em
+segundo plano e exibe a competência encontrada, separada do mês escolhido para
+atualização. Divergências entre arquivos, datas conflitantes, arquivos ausentes e
+falhas de leitura aparecem nos detalhes. A consulta não altera documentos. DOCX é
+lido diretamente; DOC utiliza uma instância exclusiva do Word em leitura apenas.
+Um cache em memória por caminho e conteúdo evita reler arquivos inalterados, e a
+consulta é renovada depois da atualização. Esta identificação não substitui a
+conferência opcional das alterações nem muda o fluxo de impressão.
