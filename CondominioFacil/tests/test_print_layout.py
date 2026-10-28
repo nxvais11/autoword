@@ -17,7 +17,7 @@ class PrintLayout(unittest.TestCase):
         self.options = SimpleNamespace(PrintDrawingObjects=False, PrintBackgrounds=False, PrintDraft=True)
         self.document = Mock()
         self.document.Revisions.Count = 0
-        self.word = SimpleNamespace(app=SimpleNamespace(Options=self.options, Dialogs=Mock()),
+        self.word = SimpleNamespace(app=SimpleNamespace(Options=self.options, Dialogs=Mock(), Visible=False, ScreenUpdating=False),
                                     open=Mock(return_value=self.document))
 
     def assert_graphics_enabled(self):
@@ -39,6 +39,9 @@ class PrintLayout(unittest.TestCase):
                 receipt = {'files': [{'path': str(source), 'sha256': digest(source)}]}
                 def send(**kwargs):
                     self.assert_graphics_enabled()
+                    self.assertTrue(self.word.app.Visible)
+                    self.assertTrue(self.word.app.ScreenUpdating)
+                    self.document.PrintPreview.assert_called()
                     self.document.Activate.assert_called()
                     self.assertEqual(self.document.ActiveWindow.View.Type, 3)
                     self.document.Repaginate.assert_called()
@@ -51,6 +54,9 @@ class PrintLayout(unittest.TestCase):
                 else:
                     self.assertEqual(print_receipt(self.word, receipt, 'TEST'), 1)
                 self.assert_preferences_restored()
+                self.assertFalse(self.word.app.Visible)
+                self.assertFalse(self.word.app.ScreenUpdating)
+                self.document.ClosePrintPreview.assert_called()
                 self.assertEqual(source.read_bytes(), original)
                 self.word.open.assert_called_with(source, read_only=True)
                 self.document.Close.assert_called_with(0)
