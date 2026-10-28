@@ -8,7 +8,7 @@ Aplicativo Windows para atualizar, individualmente ou em lote, os documentos men
 - Atualização direta ou em subpasta opcional, preservando arquivos não selecionados.
 - Busca em lote na pasta principal, com prévia opcional e validação automática.
 - Planilha de responsáveis com associação de colunas e monitoramento seletivo.
-- Impressão dos resultados somente após uma atualização individual concluída.
+- Impressão individual de arquivos existentes ou recém-atualizados, sem exigir atualização.
 - Interface simples com controles padrão e paleta clara, sem desenhos personalizados ou animações.
 - Atualização automática do programa pelas Releases públicas deste repositório, sem token no computador.
 
@@ -27,11 +27,11 @@ Este repositório contém somente código, instruções e testes sintéticos. Os
 Os responsáveis são atualizados pela planilha vinculada ou pelo cadastro manual.
 A opção de renúncias em PDF foi retirada, e PDFs não bloqueiam mais a geração.
 
-O botão Imprimir é liberado somente após atualizar um único condomínio com sucesso.
-Permite escolher impressora e cópias dos documentos resultantes, verificando se os
-arquivos ainda correspondem à atualização. Uma geração em lote nunca libera
-impressão, mesmo se depois for selecionado apenas um condomínio. Nenhum documento
-é impresso automaticamente. Detalhes em CondominioFacil/LEIA-ME.md.
+Selecione um único condomínio para imprimir os arquivos existentes, sem precisar
+atualizar a competência. Somente os tipos marcados em Opções entram na impressão.
+A janela mostra os arquivos, impressora e cópias. Depois de uma atualização
+individual, usa os resultados recém-gerados. Arquivos alterados depois de abrir
+a janela precisam ser selecionados novamente. Não há impressão em lote.
 
 ## Desenvolvimento
 

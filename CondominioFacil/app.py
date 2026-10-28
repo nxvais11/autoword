@@ -14,7 +14,7 @@ from engine import MONTHS, FILES, roster
 from word_service import Word, discover, inspect_condo, generate, select_files, output_targets, digest
 from responsible_sheet import SheetMonitor, read_table, sheet_names, key
 from version import VERSION
-from print_service import receipt_for, validate_receipt, available_printers, print_receipt
+from print_service import existing_receipt, receipt_for, validate_receipt, available_printers, print_receipt
 from theme import apply_theme, COLORS
 
 DATA = Path(os.environ.get('LOCALAPPDATA', str(Path.home())))/'CondominioFacil'
@@ -258,6 +258,8 @@ class App(tk.Tk):
     def invalidate(self, *args):
         self.preview = {}
         self.clear_print()
+        if hasattr(self, 'tree') and hasattr(self, 'print_button'):
+            self.refresh_print()
 
     def clear_print(self):
         self.print_job = None
@@ -266,9 +268,12 @@ class App(tk.Tk):
 
     def refresh_print(self):
         selected = self.selected()
-        allowed = (not self.busy and self.print_job is not None and len(selected)==1
+        kinds = self.chosen_kinds()
+        existing = (len(selected)==1 and bool(kinds)
+                    and all(selected[0]['files'][i] is not None for i in kinds))
+        updated = (self.print_job is not None and len(selected)==1
                    and selected[0]['folder']==self.print_job['folder'])
-        self.print_button.configure(state='normal' if allowed else 'disabled')
+        self.print_button.configure(state='normal' if not self.busy and (existing or updated) else 'disabled')
 
     def choose_root(self):
         selected = filedialog.askdirectory(title='Pasta dos quatro documentos OU pasta principal dos condomínios')
@@ -298,7 +303,7 @@ class App(tk.Tk):
         self.select_all()
         self.selection_changed()
         self.destination.set(condos[0]['folder'] if len(condos)==1 else '')
-        self.status.set(f'{len(condos)} condomínio(s) encontrado(s). Escolha a competência e atualize.')
+        self.status.set(f'{len(condos)} condomínio(s) encontrado(s). Selecione para atualizar ou imprimir os arquivos existentes.')
         self.last_jobs = {}
         for condo in condos:
             saved_job = self.mappings.get('__jobs__',{}).get(condo['folder'])
@@ -1000,14 +1005,16 @@ class App(tk.Tk):
         ttk.Button(actions,text='Cancelar',command=dialog.destroy).pack(side='right',padx=8)
 
     def print_dialog(self):
-        if self.busy or self.print_job is None or len(self.selected()) != 1:
-            messagebox.showinfo('Imprimir', 'Atualize um único condomínio antes de imprimir.', parent=self)
+        selected = self.selected()
+        if self.busy or len(selected) != 1 or not self.chosen_kinds():
+            messagebox.showinfo('Imprimir', 'Selecione um único condomínio e os documentos a imprimir.', parent=self)
             return
-        if self.selected()[0]['folder'] != self.print_job['folder']:
-            self.clear_print()
-            return
-        receipt = copy.deepcopy(self.print_job)
+        condo = selected[0]
+        kinds = self.chosen_kinds()
         try:
+            receipt = (copy.deepcopy(self.print_job)
+                       if self.print_job and self.print_job['folder']==condo['folder']
+                       else existing_receipt(condo,kinds))
             validate_receipt(receipt)
             names, default = available_printers()
             if not names:
@@ -1024,8 +1031,10 @@ class App(tk.Tk):
         body = ttk.Frame(dialog, padding=24)
         body.pack(fill='both', expand=True)
         ttk.Label(body, text=receipt['name'], style='Section.TLabel').pack(anchor='w')
-        ttk.Label(body, text=f"Competência {receipt['month']:02}/{receipt['year']} · "
-                  f"{len(receipt['files'])} documento(s) atualizado(s)", style='Muted.TLabel').pack(anchor='w', pady=(4, 12))
+        description = (f"Competência {receipt['month']:02}/{receipt['year']} · "
+                       if receipt.get('month') else 'Arquivos existentes · sem alterar o conteúdo · ')
+        ttk.Label(body, text=description+f"{len(receipt['files'])} documento(s)",
+                  style='Muted.TLabel').pack(anchor='w', pady=(4, 12))
         for item in receipt['files']:
             ttk.Label(body, text=Path(item['path']).name).pack(anchor='w', pady=2)
         ttk.Label(body, text='Impressora').pack(anchor='w', pady=(16, 4))
@@ -1039,8 +1048,9 @@ class App(tk.Tk):
         def confirm():
             try:
                 count = int(copies.get())
-                if self.busy or self.print_job != receipt:
-                    raise ValueError('A atualização mudou. Feche esta janela e atualize o condomínio novamente.')
+                current = self.selected()
+                if self.busy or len(current)!=1 or current[0]['folder']!=condo['folder'] or self.chosen_kinds()!=kinds:
+                    raise ValueError('A seleção mudou. Feche esta janela e selecione novamente os documentos.')
                 if printer.get() not in names or not 1 <= count <= 99:
                     raise ValueError('Escolha a impressora e informe de 1 a 99 cópias.')
                 validate_receipt(receipt)

@@ -164,6 +164,35 @@ class Interface(unittest.TestCase):
         self.assertIsInstance(self.app.print_button, ttk.Button)
         self.assertNotIn('rounded', str(self.app.style.layout('Primary.TButton')))
 
+    def test_print_existing_enabled_after_folder_selection_without_generation(self):
+        from engine import FILES
+        folder = Path(self.tmp.name)/'Condomínio existente'
+        folder.mkdir()
+        files = []
+        for name in FILES:
+            path = folder/(name+'.doc')
+            path.write_bytes(b'documento existente sem atualizar')
+            files.append(path)
+        condo = dict(name=folder.name,folder=str(folder),files=files,errors=[],found=[])
+        self.app.apply_discovered(str(folder),[condo])
+        self.app.update()
+        self.assertIsNone(self.app.print_job)
+        self.assertEqual(str(self.app.print_button.cget('state')),'normal')
+        with patch('app.available_printers',return_value=(['Teste'],'Teste')),patch('app.Word') as word:
+            self.app.print_dialog()
+            word.assert_not_called()
+        for child in self.app.winfo_children():
+            if isinstance(child,tk.Toplevel):
+                child.destroy()
+        self.app.doc_choices[0].set(False)
+        self.app.invalidate()
+        self.assertEqual(str(self.app.print_button.cget('state')),'normal')
+        for choice in self.app.doc_choices:
+            choice.set(False)
+        self.app.invalidate()
+        self.assertEqual(str(self.app.print_button.cget('state')),'disabled')
+        self.assertTrue(all(path.read_bytes()==b'documento existente sem atualizar' for path in files))
+
     def test_simple_theme_has_no_custom_images_or_layout_elements(self):
         from theme import COLORS
         self.assertFalse(hasattr(self.app, '_theme_images'))

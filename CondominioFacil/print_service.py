@@ -1,4 +1,4 @@
-"""Imprime exclusivamente os resultados de uma atualização individual concluída."""
+"""Impressão individual de documentos existentes ou recém-atualizados, sem editar."""
 from pathlib import Path
 from word_service import digest
 
@@ -13,13 +13,21 @@ def receipt_for(condo, target, docs, month, year):
         raise ValueError('Nenhum resultado válido para impressão.')
     return dict(folder=condo['folder'], name=condo['name'], month=month, year=year, files=files)
 
+def existing_receipt(condo, kinds):
+    if not kinds or any(i not in range(4) for i in kinds):
+        raise ValueError('Selecione os documentos a imprimir.')
+    paths = [condo['files'][i] for i in sorted(set(kinds))]
+    if any(path is None for path in paths):
+        raise ValueError('Documento ausente ou ambíguo. Selecione os arquivos nas opções.')
+    return receipt_for(condo, condo['folder'], [{'path':Path(path)} for path in paths], None, None)
+
 def validate_receipt(receipt):
     if not receipt or not receipt.get('files'):
-        raise ValueError('Atualize um único condomínio antes de imprimir.')
+        raise ValueError('Selecione os documentos de um único condomínio para imprimir.')
     for item in receipt['files']:
         path = Path(item['path'])
         if not path.is_file() or path.is_symlink() or digest(path) != item['sha256']:
-            raise ValueError('Um documento mudou ou foi removido. Atualize o condomínio novamente antes de imprimir.')
+            raise ValueError('Um documento mudou ou foi removido. Selecione os arquivos novamente antes de imprimir.')
 
 def available_printers():
     import win32print

@@ -157,21 +157,24 @@ de renúncia permanecem no cadastro local, mas não são aplicados pelo aplicati
 
 ## Impressão individual
 
-O botão **Imprimir**, ao lado de **Atualizar documentos**, fica disponível somente
-depois de uma atualização individual concluída com sucesso. Atualizações em lote,
-canceladas ou com falha não liberam a impressão, mesmo que depois você selecione
-apenas um condomínio da lista.
+Selecione a pasta e um único condomínio na lista para habilitar **Imprimir**.
+Não é preciso atualizar o Word antes. São usados os documentos já existentes
+na pasta selecionada, somente dos tipos marcados em **Opções**. Não é feita
+alteração de competência, datas, responsáveis ou conteúdo para imprimir.
 
-A janela de impressão mostra o condomínio, a competência e os arquivos
-efetivamente atualizados, e permite escolher impressora e quantidade de cópias.
-Somente esses resultados são impressos. O aplicativo não cria PDFs ou cópias
-intermediárias para imprimir e não muda a impressora padrão do Windows.
+Se você acabou de atualizar um condomínio, o botão usa os resultados dessa
+atualização, inclusive quando foram salvos em outro destino ou subpasta.
+Ao mudar a seleção ou as opções, volta a usar os arquivos da pasta selecionada.
 
-Alterar a seleção, a competência, os documentos ou o destino invalida a liberação.
-Se um arquivo tiver mudado ou sido removido, atualize novamente antes de imprimir.
-O cancelamento impede os próximos documentos; páginas já enviadas à fila do
-Windows precisam ser canceladas nessa fila. Uma falha parcial não provoca
-reimpressão automática. A mensagem confirma envio à impressora, não a saída física.
+A janela identifica os arquivos e permite escolher impressora e cópias.
+Documentos ausentes ou ambíguos devem ser vinculados nas opções antes de imprimir.
+Se algum arquivo mudar depois de abrir a janela, feche e selecione novamente.
+A impressão continua restrita a um condomínio por vez e não ocorre automaticamente.
+Nenhum PDF ou cópia intermediária é criado para imprimir.
+
+Cancelar impede os próximos documentos; páginas já enviadas precisam ser
+canceladas na fila do Windows. O envio é testado com Word simulado no CI;
+a impressão física depende do Word, da impressora e de seus drivers.
 
 ## Atualizações automáticas do próprio aplicativo
 

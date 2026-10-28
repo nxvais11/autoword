@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import App
 from engine import FILES
-from print_service import receipt_for, print_receipt
+from print_service import existing_receipt, receipt_for, print_receipt
 from word_service import discover, inspect_condo
 from test_engine import APPROVAL, FakeWord
 
@@ -78,6 +78,25 @@ class Printing(unittest.TestCase):
             with self.assertRaises(ValueError):
                 print_receipt(word, self.receipt, 'Teste', copies)
         word.open.assert_not_called()
+
+    def test_existing_documents_can_print_without_updating_or_matching_month(self):
+        before = {p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        receipt = existing_receipt(self.condos[0], (1,3))
+        self.assertIsNone(receipt['month'])
+        self.assertEqual([Path(item['path']).name for item in receipt['files']],
+                         [self.condos[0]['files'][i].name for i in (1,3)])
+        document = Mock()
+        word = SimpleNamespace(app=SimpleNamespace(Dialogs=Mock(return_value=Mock())), open=Mock(return_value=document))
+        self.assertEqual(print_receipt(word,receipt,'Teste'),2)
+        self.assertEqual(before,{p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
+    def test_missing_or_unselected_documents_cannot_be_added_to_existing_print(self):
+        condo = dict(self.condos[0], files=list(self.condos[0]['files']))
+        condo['files'][0] = None
+        self.assertEqual(len(existing_receipt(condo,(1,))['files']),1)
+        for kinds in ((),(0,),(4,)):
+            with self.assertRaises(ValueError):
+                existing_receipt(condo,kinds)
 
     def run_generation(self, condos, broken=False, cancel_after=False):
         value = lambda x:SimpleNamespace(get=lambda:x)
