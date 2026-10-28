@@ -9,7 +9,7 @@ from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from pypdf import PdfWriter
 from pypdf.generic import NameObject,DictionaryObject,DecodedStreamObject
-from central_service import DEFAULTS,owner,search,selected_plan,verify_plan,compare_texts,compare_reports,digest
+from central_service import DEFAULTS,catalog,owner,search,selected_plan,verify_plan,compare_texts,compare_reports,digest
 from central_print import print_pdf,execute_plan
 from engine import FILES
 
@@ -38,6 +38,14 @@ class Central(unittest.TestCase):
         for name in ('ALFA.pdf','ALFA poup.pdf','ALFA JARDIM.pdf'):pdf(self.month/name)
     def tearDown(self):self.tmp.cleanup()
     def lookup(self):return search(self.cfg,'ALFA',9,2026)
+    def test_catalog_ignores_administrative_folders_without_recursive_scan(self):
+        root=Path(self.cfg['root'])
+        (root/'ADMINISTRATIVO'/'arquivo antigo'/'FECHAMENTO DE LIVRO').mkdir(parents=True)
+        (root/'MODELOS').mkdir()
+        (root/'NOVO'/'FECHAMENTO DE LIVROS').mkdir(parents=True)
+        direct=root/'DIRETO';direct.mkdir();(direct/'CAPA.doc').write_text('modelo')
+        self.assertEqual(catalog(self.cfg),['ALFA','ALFA JARDIM','DIRETO','NOVO'])
+
     def test_compound_names_and_token_boundaries(self):
         names=['ALFA','ALFA JARDIM']
         self.assertEqual(owner('extrato ALFA JARDIM poup',names),'ALFA JARDIM')

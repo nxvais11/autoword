@@ -5,7 +5,7 @@ import re
 import unicodedata
 from pathlib import Path
 from pypdf import PdfReader
-from word_service import discover,digest,print_layout
+from word_service import discover,digest,print_layout,document_kind,filename_key,CLOSING_FOLDERS
 
 DEFAULTS={'root':r'Z:\_CONDOMÍNIOS ATIVOS','statements':r'Z:\OFX E EXTRATOS','reports':'',
           'main_printer':'','report_printer':'','include_report':False,'overrides':{}}
@@ -28,7 +28,18 @@ def owner(text,names):
 
 def catalog(settings):
     root=Path(settings['root'])
-    return sorted((p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith('.')),key=norm)
+    names=[]
+    for home in root.iterdir():
+        if not home.is_dir() or home.is_symlink() or home.name.startswith('.'):continue
+        try:
+            entries=list(home.iterdir())
+            closing=any(p.is_dir() and not p.is_symlink() and filename_key(p.name) in CLOSING_FOLDERS for p in entries)
+            documents=any(p.is_file() and not p.name.startswith('~$') and p.suffix.lower() in ('.doc','.docx')
+                          and document_kind(p.stem) is not None for p in entries)
+            if closing or documents:names.append(home.name)
+        except OSError:
+            continue
+    return sorted(names,key=norm)
 
 def pdf_text(path,first=False):
     reader=PdfReader(path)
