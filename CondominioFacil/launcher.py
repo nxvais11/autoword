@@ -75,11 +75,11 @@ def smoke_test():
     # Executado no CI sem Word, rede ou acesso aos cadastros do usuário.
     import tempfile
     import win32timezone
-    import pywintypes
+    import win32file
     # O Win32 carrega este módulo dinamicamente ao devolver datas de trabalhos da fila.
     assert win32timezone.TimeZoneInfo
-    stamp=pywintypes.Time(0)
-    assert stamp.year >= 1969
+    stamp=win32file.GetFileAttributesEx(sys.executable)[1]
+    assert stamp.tzinfo is not None
     from unittest.mock import patch
     from app import App
     with tempfile.TemporaryDirectory() as folder:
