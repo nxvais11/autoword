@@ -85,6 +85,8 @@ class App(tk.Tk):
         self.status = tk.StringVar(value='Escolha uma pasta para começar. A conferência é opcional.')
         self.controls = []
         self.build_interface()
+        self.signature=ttk.Label(self,text='98novais',style='Muted.TLabel',anchor='e',padding=(16,4))
+        self.signature.pack(side='bottom',fill='x')
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.after(100, self.poll)
         self.after(3000, self.watch_sheet)

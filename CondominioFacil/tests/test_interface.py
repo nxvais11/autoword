@@ -34,6 +34,8 @@ class Interface(unittest.TestCase):
         self.app.update()
 
     def tearDown(self):
+        panel=getattr(self.app,'central_panel',None)
+        if panel is not None and panel.winfo_exists():panel.destroy()
         # Cancela callbacks para não deixar trabalho pendente entre janelas.
         for callback in self.app.tk.splitlist(self.app.tk.call('after', 'info')):
             self.app.after_cancel(callback)
@@ -242,7 +244,7 @@ class Interface(unittest.TestCase):
         from central_service import DEFAULTS
         from engine import FILES
         from test_engine import APPROVAL
-        folder=Path(self.tmp.name)/'Condominios'/'TESTE'/'FECHAMENTO DE LIVRO';folder.mkdir(parents=True,exist_ok=True)
+        folder=Path(self.tmp.name).resolve()/'Condominios'/'TESTE'/'FECHAMENTO DE LIVRO';folder.mkdir(parents=True,exist_ok=True)
         for k,stem in enumerate(FILES):(folder/(stem+'.doc')).write_text(APPROVAL if k==0 else 'AGOSTO/2026',encoding='utf-8')
         save_settings(Path(self.tmp.name)/'central.json',dict(DEFAULTS,root=str(folder.parent.parent),statements=self.tmp.name,main_printer='HP TEST'))
         self.app.open_central();panel=self.app.central_panel;self.wait_central(panel)
@@ -253,9 +255,14 @@ class Interface(unittest.TestCase):
             panel,folder=self.workspace_fixture()
             self.assertTrue(panel.winfo_ismapped());self.assertFalse(self.app.batch_view.winfo_ismapped())
             self.assertEqual(panel.names.cget('values'),('TESTE',))
+            self.assertEqual(self.app.signature.cget('text'),'98novais')
+            self.assertTrue(self.app.signature.winfo_ismapped())
             self.assertIs(panel.month,self.app.month);self.assertIs(panel.year,self.app.year)
             panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
             self.assertIsNotNone(panel.result)
+            self.assertEqual(panel.names.get(),'TESTE')
+            self.assertEqual(panel.month_box.get(),'Novembro')
+            self.assertEqual(panel.year_box.get(),'2026')
             self.app.geometry('900x650');self.app.update()
             for button in (panel.update_print_button,panel.print_button):
                 self.assertTrue(button.winfo_ismapped())

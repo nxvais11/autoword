@@ -28,7 +28,7 @@ class AdobePrinting(unittest.TestCase):
         with patch.dict(sys.modules,{'win32print':self.wp}),patch('pdf_print.acrobat_executable',return_value=Path('Adobe/Acrobat.exe')),patch('pdf_print.subprocess.Popen') as start:
             self.assertTrue(print_pdf(self.path,'EPSON TEST',self.cancel))
         args=start.call_args.args[0]
-        self.assertEqual(args,['Adobe/Acrobat.exe','/t',str(self.path.resolve()),'EPSON TEST','TEST Driver','TEST_PORT'])
+        self.assertEqual(args,[str(Path('Adobe/Acrobat.exe')),'/t',str(self.path.resolve()),'EPSON TEST','TEST Driver','TEST_PORT'])
         self.assertEqual(before,self.path.read_bytes())
         self.wp.SetDefaultPrinter.assert_not_called();self.wp.SetPrinter.assert_not_called()
     def test_waits_until_spooling_finishes_and_ignores_other_documents(self):
