@@ -29,11 +29,13 @@ class Interface(unittest.TestCase):
         for item in self.patches:
             item.start()
         with patch('tkinter.PhotoImage', side_effect=AssertionError('Interface simples não deve gerar imagens')):
-            self.app = App()
+            self.app = App(start_central=False)
         self.app.geometry('1000x760')
         self.app.update()
 
     def tearDown(self):
+        panel=getattr(self.app,'central_panel',None)
+        if panel is not None and panel.winfo_exists():panel.destroy()
         # Cancela callbacks para não deixar trabalho pendente entre janelas.
         for callback in self.app.tk.splitlist(self.app.tk.call('after', 'info')):
             self.app.after_cancel(callback)
@@ -229,6 +231,75 @@ class Interface(unittest.TestCase):
             window.destroy()
         self.assertFalse(self.app.busy)
 
+    def wait_central(self,window):
+        import time
+        until=time.monotonic()+5
+        while (window.busy or self.app.busy) and time.monotonic()<until:
+            self.app.update();time.sleep(.01)
+        self.app.update()
+        self.assertFalse(window.busy);self.assertFalse(self.app.busy)
+
+    def workspace_fixture(self):
+        from central_ui import save_settings
+        from central_service import DEFAULTS
+        from engine import FILES
+        from test_engine import APPROVAL
+        folder=Path(self.tmp.name).resolve()/'Condominios'/'TESTE'/'FECHAMENTO DE LIVRO';folder.mkdir(parents=True,exist_ok=True)
+        for k,stem in enumerate(FILES):(folder/(stem+'.doc')).write_text(APPROVAL if k==0 else 'AGOSTO/2026',encoding='utf-8')
+        save_settings(Path(self.tmp.name)/'central.json',dict(DEFAULTS,root=str(folder.parent.parent),statements=self.tmp.name,main_printer='HP TEST'))
+        self.app.open_central();panel=self.app.central_panel;self.wait_central(panel)
+        return panel,folder
+
+    def test_workspace_replaces_batch_and_reuses_single_selection_and_period(self):
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
+            panel,folder=self.workspace_fixture()
+            self.assertTrue(panel.winfo_ismapped());self.assertFalse(self.app.batch_view.winfo_ismapped())
+            self.assertEqual(panel.names.cget('values'),('TESTE',))
+            self.assertEqual(self.app.signature.cget('text'),'98novais')
+            self.assertTrue(self.app.signature.winfo_ismapped())
+            self.assertIs(panel.month,self.app.month);self.assertIs(panel.year,self.app.year)
+            panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
+            self.assertIsNotNone(panel.result)
+            self.assertEqual(panel.names.get(),'TESTE')
+            self.assertEqual(panel.month_box.get(),'Novembro')
+            self.assertEqual(panel.year_box.get(),'2026')
+            self.app.geometry('900x650');self.app.update()
+            for button in (panel.update_print_button,panel.print_button):
+                self.assertTrue(button.winfo_ismapped())
+                self.assertLessEqual(button.winfo_rooty()-self.app.winfo_rooty()+button.winfo_height(),self.app.winfo_height())
+            self.app.show_batch();self.app.update()
+            self.assertFalse(panel.winfo_ismapped());self.assertTrue(self.app.batch_view.winfo_ismapped())
+            self.app.open_central();self.wait_central(panel)
+            self.assertIs(panel,self.app.central_panel)
+            panel.month.set('Dezembro');self.assertIsNone(panel.result)
+
+    def test_combined_action_updates_before_print_without_preview_gate_and_only_print_does_not_update(self):
+        from test_central_update import Session
+        from engine import FILES
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result),patch('central_ui.messagebox.showerror') as error:
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
+            panel.checked={0,1,2,3}
+            with patch('central_ui.Word',Session),patch('central_print.execute_plan',return_value=4) as printing,patch('central_ui.messagebox.askyesno',return_value=True):
+                panel.update_selected(True);self.wait_central(panel)
+                printing.assert_called_once()
+            self.assertIn('NOVEMBRO/2026',(folder/(FILES[0]+'.doc')).read_text())
+            self.assertIn(str(folder),self.app.last_jobs)
+            before={p:p.read_bytes() for p in folder.iterdir()}
+            with patch('central_ui.execute_plan',return_value=4) as printing,patch('central_ui.run_update') as updating,patch('central_ui.messagebox.askyesno',return_value=True):
+                panel.print_selected();self.wait_central(panel)
+                printing.assert_called_once();updating.assert_not_called()
+            self.assertEqual(before,{p:p.read_bytes() for p in before})
+            error.assert_not_called()
+
+    def test_workspace_controls_pause_during_sheet_or_roster_background_work(self):
+        panel,folder=self.workspace_fixture()
+        self.app.busy=True;panel.poll()
+        self.assertTrue(all(str(c.cget('state'))=='disabled' for c in panel.controls))
+        self.app.busy=False;panel.poll()
+        self.assertEqual(str(panel.names.cget('state')),'readonly')
+        self.assertEqual(str(panel.print_button.cget('state')),'normal')
+
     def test_open_combobox_popdown_does_not_break_periodic_monitor_or_shortcuts(self):
         from tkinter import ttk
         combo=next(control for control,_ in self.app.controls if isinstance(control,ttk.Combobox))
@@ -321,6 +392,11 @@ class Interface(unittest.TestCase):
         capture(self.app,'MAIN')
         dialog = self.app.options_dialog()
         capture(dialog,'OPTIONS')
+        self.app.tk.call(dialog.protocol('WM_DELETE_WINDOW'))
+        panel,folder=self.workspace_fixture()
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
+            panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026');panel.query();self.wait_central(panel)
+        capture(self.app,'WORKSPACE')
 
 if __name__ == '__main__':
     unittest.main()

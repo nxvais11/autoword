@@ -248,3 +248,17 @@ Atalhos: **Ctrl+O** abre uma pasta, **Ctrl+Enter** atualiza, **F1** abre as opç
 e **Ctrl+A** seleciona todos quando o foco está na lista. Durante uma tarefa,
 os controles ficam bloqueados e **Cancelar** permanece disponível.
 
+
+
+## Central unificada
+
+Escolha condomínio e competência na tela principal. Use Atualizar e imprimir,
+Só atualizar ou Só imprimir. As caixinhas da lista controlam a impressão; os Words
+a atualizar são configurados em Opções → Atualização e responsáveis. A prévia de
+alterações é opcional. Atualização em lote continua disponível no topo.
+
+A impressão Word mantém a prévia que preserva o cabeçalho. PDFs são enviados ao
+Adobe Acrobat/Reader instalado, sem transformação em imagem pelo aplicativo. Nas
+preferências das impressoras, configure uma cópia e somente frente. Se a Central
+não confirmar o PDF na fila, confira o Adobe e a fila antes de tentar novamente:
+o documento pode ter sido enviado, e o aplicativo não repete automaticamente.

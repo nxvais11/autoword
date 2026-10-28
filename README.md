@@ -22,16 +22,29 @@ O atualizador verifica o SHA-256 fornecido pelo GitHub, a versão interna e os a
 
 Este repositório contém somente código, instruções e testes sintéticos. Os PDFs e os documentos reais dos condomínios, o texto bruto de OCR, configurações locais e credenciais não são publicados. O pacote de Release é montado por uma lista de arquivos de programa; não inclui testes, exemplos ou documentos.
 
-## Responsáveis e impressão
+## Atualizar e imprimir na mesma tela
 
-Os responsáveis são atualizados pela planilha vinculada ou pelo cadastro manual.
-A opção de renúncias em PDF foi retirada, e PDFs não bloqueiam mais a geração.
+A Central é a tela principal. Escolha condomínio e competência uma vez e use:
 
-Selecione um único condomínio para imprimir os arquivos existentes, sem precisar
-atualizar a competência. Somente os tipos marcados em Opções entram na impressão.
-A janela mostra os arquivos, impressora e cópias. Depois de uma atualização
-individual, usa os resultados recém-gerados. Arquivos alterados depois de abrir
-a janela precisam ser selecionados novamente. Não há impressão em lote.
+- **Atualizar e imprimir**: atualiza os Words configurados e, após sucesso, imprime os arquivos marcados.
+- **Só atualizar**: atualiza o fechamento sem enviar nada às impressoras.
+- **Só imprimir**: imprime os arquivos existentes sem alterar mês, dia ou responsáveis.
+
+As caixas da lista escolhem somente a impressão. Em **Opções → Atualização e responsáveis**,
+escolha quais Words atualizar, destino, subpasta AAAA-MM, cadastro manual ou planilha.
+A conferência de alterações é opcional. Uma falha na atualização impede a impressão
+combinada. Uma falha na impressão não desfaz uma atualização já concluída e nunca
+provoca reenvio automático. O destino e os nomes dos documentos são preservados.
+
+A ordem é capa, aprovação, anexo I, anexo II e extratos. O relatório de obrigações
+é opcional e usa a outra impressora. A coluna Próxima realização do Word original
+é verificada contra mês e ano selecionados mesmo quando o relatório está desmarcado.
+A comparação do PDF pessoal com o Word do Jurídico continua disponível.
+
+**Atualização em lote** abre a seleção de vários condomínios, com o motor e as
+regras existentes. **Voltar à Central** retorna ao fluxo individual. A planilha
+continua monitorada enquanto o aplicativo estiver aberto e atualiza somente os
+condomínios afetados; não dispara impressão automática.
 
 ## Desenvolvimento
 
@@ -56,13 +69,24 @@ conferido em assets/autoword.svg. Pillow e PyInstaller são dependências apenas
 O executável baixa o instalador oficial com hash verificado em segundo plano e o
 executa após o processo fechar; não tenta sobrescrever o próprio executável em uso.
 
-## Central por condomínio
+## Impressão de Word e PDF
 
-Central de impressão seleciona condomínio/competência, localiza fechamento, extratos
-e obrigações, com caminhos e impressoras configuráveis. Extratos são marcados por
-padrão e obrigações opcionais. Compara texto do PDF pessoal ao Word do Jurídico,
-sem competência e sem editar os originais. Divergências exigem escolher a versão.
-Impressão sequencial em uma cópia só frente via PDFium/GDI, com impressora separada
-para obrigações, sem automatizar janelas do Acrobat ou mudar o padrão do Windows.
-A conferência manual é explícita quando a leitura não é segura. Arquivos de exemplo
-e caminhos pessoais reais não são publicados.
+Words são abertos pelo Word instalado, somente para leitura, no caminho original.
+A prévia de impressão é preparada antes do envio para preservar o cabeçalho; a
+janela do Word pode aparecer brevemente. O aplicativo não salva alterações durante
+uma ação de só impressão.
+
+PDFs são encaminhados ao Adobe Acrobat/Reader instalado pelo comando /t com o
+nome, driver e porta da impressora selecionada. O AutoWord não converte as páginas
+em imagens nem regrava o PDF. O Adobe pode aparecer durante o envio. Configure uma
+cópia e somente frente nas preferências das duas impressoras. Preferências incompatíveis
+ou Adobe ausente são informados antes de iniciar a impressão. Não é alterada a
+impressora padrão do Windows.
+
+A Central aguarda identificar o documento correspondente na fila antes de avançar.
+Se não conseguir confirmar, interrompe o restante e pede conferência do Adobe e da
+fila. O arquivo pode já ter sido enviado: não existe repetição automática. O comando
+/t e as configurações de página dependem da versão do Adobe/driver; a impressão física
+precisa ser validada no computador do usuário, inclusive letras nas bordas das tabelas.
+
+Arquivos de exemplo e caminhos pessoais reais não são publicados.
