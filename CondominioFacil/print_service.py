@@ -1,6 +1,6 @@
 """Impressão individual de documentos existentes ou recém-atualizados, sem editar."""
 from pathlib import Path
-from word_service import digest
+from word_service import digest, print_layout
 
 def receipt_for(condo, target, docs, month, year):
     files = []
@@ -57,7 +57,8 @@ def print_receipt(word, receipt, printer, copies=1, cancel=None, progress=None):
         try:
             if progress:
                 progress(sent+1, len(receipt['files']), path.name)
-            doc.PrintOut(Background=False, Copies=copies, Collate=True, PrintToFile=False)
+            with print_layout(word):
+                doc.PrintOut(Background=False, Copies=copies, Collate=True, PrintToFile=False)
             sent += 1
         finally:
             doc.Close(0)

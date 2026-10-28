@@ -5,7 +5,7 @@ import re
 import unicodedata
 from pathlib import Path
 from pypdf import PdfReader
-from word_service import discover,digest
+from word_service import discover,digest,print_layout
 
 DEFAULTS={'root':r'Z:\_CONDOMÍNIOS ATIVOS','statements':r'Z:\OFX E EXTRATOS','reports':'',
           'main_printer':'','report_printer':'','include_report':False,'overrides':{}}
@@ -67,7 +67,9 @@ def export_word(word,source,destination):
     doc=word.open(source,read_only=True)
     try:
         if doc.Revisions.Count:raise ValueError('Word contém alterações controladas pendentes; revise manualmente.')
-        doc.ExportAsFixedFormat(OutputFileName=str(destination),ExportFormat=17,OpenAfterExport=False)
+        with print_layout(word):
+            doc.ExportAsFixedFormat(OutputFileName=str(destination),ExportFormat=17,
+                                   OpenAfterExport=False,OptimizeFor=0,BitmapMissingFonts=True)
     finally:doc.Close(0)
     if not Path(destination).is_file():raise ValueError('Word não produziu o PDF temporário.')
 

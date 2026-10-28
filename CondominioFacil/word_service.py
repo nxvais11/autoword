@@ -5,11 +5,24 @@ import os
 import re
 import shutil
 import tempfile
+from contextlib import contextmanager, ExitStack
 from datetime import datetime
 from pathlib import Path
 from engine import FILES, normalize, plan, apply_text, utf16_offset
 from responsible_sheet import sheet_changes
 from resignations import validate_events,removal_changes,combine_changes,find_pdfs
+
+@contextmanager
+def print_layout(word):
+    """Inclui formas e fundos na saída, restaurando as preferências do Word."""
+    options = word.app.Options
+    with ExitStack() as restore:
+        for name, value in (('PrintDrawingObjects', True), ('PrintBackgrounds', True),
+                            ('PrintDraft', False)):
+            previous = getattr(options, name)
+            restore.callback(setattr, options, name, previous)
+            setattr(options, name, value)
+        yield
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()

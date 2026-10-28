@@ -43,7 +43,7 @@ class Printing(unittest.TestCase):
         before = {p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         document = Mock()
         setup = Mock()
-        word = SimpleNamespace(app=SimpleNamespace(Dialogs=Mock(return_value=setup)), open=Mock(return_value=document))
+        word = SimpleNamespace(app=SimpleNamespace(Dialogs=Mock(return_value=setup),Options=Mock()), open=Mock(return_value=document))
         self.assertEqual(print_receipt(word, receipt, 'Impressora de teste', 2), 1)
         word.open.assert_called_once_with((target/source.name).resolve(), read_only=True)
         document.PrintOut.assert_called_once_with(Background=False, Copies=2, Collate=True, PrintToFile=False)
@@ -86,7 +86,7 @@ class Printing(unittest.TestCase):
         self.assertEqual([Path(item['path']).name for item in receipt['files']],
                          [self.condos[0]['files'][i].name for i in (1,3)])
         document = Mock()
-        word = SimpleNamespace(app=SimpleNamespace(Dialogs=Mock(return_value=Mock())), open=Mock(return_value=document))
+        word = SimpleNamespace(app=SimpleNamespace(Dialogs=Mock(return_value=Mock()),Options=Mock()), open=Mock(return_value=document))
         self.assertEqual(print_receipt(word,receipt,'Teste'),2)
         self.assertEqual(before,{p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
