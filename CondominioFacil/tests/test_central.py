@@ -116,6 +116,7 @@ class Central(unittest.TestCase):
             self.assertIs(word,service)
             path=Path(receipt['files'][0]['path'])
             self.assertEqual(path.suffix,'.doc')
+            self.assertIn(path,originals)
             calls.append('word');return 1
         def pdf_send(*args):calls.append('pdf');return True
         with patch.dict(sys.modules,{'win32print':wp}),patch('central_print.print_receipt',side_effect=native):

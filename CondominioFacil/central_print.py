@@ -76,8 +76,10 @@ def execute_plan(rows,cancel,log,word_factory,pdf_sender=print_pdf):
             for i,row in enumerate(rows):
                 if cancel.is_set():return sent
                 source=Path(row['path']);target=Path(folder)/f'{i+1:02} - {source.stem}.pdf'
-                target=Path(folder)/(f'{i+1:02} - '+source.name)
-                target.write_bytes(source.read_bytes())
+                target=source
+                if source.suffix.lower()=='.pdf':
+                    target=Path(folder)/(f'{i+1:02} - '+source.name)
+                    target.write_bytes(source.read_bytes())
                 if source.suffix.lower()=='.pdf':
                     import pypdfium2 as pdfium
                     with pdfium.PdfDocument(str(target)) as doc:

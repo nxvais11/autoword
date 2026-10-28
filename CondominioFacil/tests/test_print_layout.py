@@ -39,6 +39,9 @@ class PrintLayout(unittest.TestCase):
                 receipt = {'files': [{'path': str(source), 'sha256': digest(source)}]}
                 def send(**kwargs):
                     self.assert_graphics_enabled()
+                    self.document.Activate.assert_called()
+                    self.assertEqual(self.document.ActiveWindow.View.Type, 3)
+                    self.document.Repaginate.assert_called()
                     if fail:
                         raise RuntimeError('printer unavailable')
                 self.document.PrintOut.side_effect = send

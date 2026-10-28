@@ -58,6 +58,9 @@ def print_receipt(word, receipt, printer, copies=1, cancel=None, progress=None):
             if progress:
                 progress(sent+1, len(receipt['files']), path.name)
             with print_layout(word):
+                doc.Activate()
+                doc.ActiveWindow.View.Type = 3  # wdPrintView: layout de impressão.
+                doc.Repaginate()
                 doc.PrintOut(Background=False, Copies=copies, Collate=True, PrintToFile=False)
             sent += 1
         finally:
