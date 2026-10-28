@@ -1,5 +1,6 @@
 """Envio sequencial de PDFs ao Windows, uma cópia só frente, sem alterar padrões."""
 import tempfile
+from contextlib import nullcontext
 from pathlib import Path
 from central_service import export_word,verify_plan
 
@@ -68,7 +69,8 @@ def execute_plan(rows,cancel,log,word_factory,pdf_sender=print_pdf):
     sent=0
     with tempfile.TemporaryDirectory(prefix='autoword_impressao_') as folder:
         prepared=[]
-        with word_factory() as word:
+        manager=word_factory() if any(Path(row['path']).suffix.lower()!='.pdf' for row in rows) else nullcontext(None)
+        with manager as word:
             for i,row in enumerate(rows):
                 if cancel.is_set():return sent
                 source=Path(row['path']);target=Path(folder)/f'{i+1:02} - {source.stem}.pdf'
@@ -83,7 +85,7 @@ def execute_plan(rows,cancel,log,word_factory,pdf_sender=print_pdf):
         verify_plan(rows)
         for row,target in zip(rows,prepared):
             if cancel.is_set():break
-            verify_plan(rows)
+            verify_plan([row])
             log('Enviando '+row['label']+' → '+row['printer'])
             if not pdf_sender(target,row['printer'],cancel,log):break
             sent+=1

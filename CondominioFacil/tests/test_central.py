@@ -118,6 +118,7 @@ class Central(unittest.TestCase):
         with patch.dict(sys.modules,{'win32print':wp}):
             count=execute_plan(rows,cancel,lambda text:None,factory,sender)
         self.assertEqual(count,1);self.assertEqual(len(sent),1)
+        factory.assert_not_called()
         self.assertEqual(before,{p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
 if __name__=='__main__':unittest.main()
