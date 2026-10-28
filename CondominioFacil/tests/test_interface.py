@@ -193,6 +193,31 @@ class Interface(unittest.TestCase):
         self.assertEqual(str(self.app.print_button.cget('state')),'disabled')
         self.assertTrue(all(path.read_bytes()==b'documento existente sem atualizar' for path in files))
 
+    def test_central_selects_all_statements_and_can_exclude_obligations(self):
+        import time
+        from central_ui import CentralDialog,save_settings
+        from central_service import DEFAULTS
+        path=Path(self.tmp.name)/'central.json'
+        save_settings(path,dict(DEFAULTS,root=self.tmp.name))
+        rows=[dict(group=group,label=group,key=group,path=None,checked=group!='obligations',printer='TEST') for group in ('closing','statement','statement','obligations')]
+        result=dict(name='CONDOMINIO TESTE',period='2026-09',rows=rows,word=None,warnings=[])
+        def wait(window):
+            until=time.monotonic()+5
+            while window.busy and time.monotonic()<until:
+                window.update();time.sleep(.01)
+            self.assertFalse(window.busy)
+        with patch('central_ui.catalog',return_value=['CONDOMINIO TESTE']),patch('central_ui.search',return_value=result):
+            window=CentralDialog(self.app,path)
+            wait(window)
+            window.name.set('CONDOMINIO TESTE');window.query();wait(window)
+            self.assertEqual(window.checked,{0,1,2})
+            window.check_statements(False);self.assertEqual(window.checked,{0})
+            window.check_statements(True);self.assertEqual(window.checked,{0,1,2})
+            window.toggle(index=3);self.assertEqual(window.checked,{0,1,2,3})
+            window.month.set('Setembro');window.invalidate();self.assertIsNone(window.result)
+            window.destroy()
+        self.assertFalse(self.app.busy)
+
     def test_simple_theme_has_no_custom_images_or_layout_elements(self):
         from theme import COLORS
         self.assertFalse(hasattr(self.app, '_theme_images'))

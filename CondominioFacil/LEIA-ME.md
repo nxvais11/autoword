@@ -1,3 +1,48 @@
+# Central de impressão por condomínio
+
+Abra **Central de impressão** na tela inicial. Em **Configurações** (também em
+Opções → Central: pastas e impressoras), confira os caminhos de condomínios,
+extratos e PDFs pessoais de obrigações. Os caminhos gerais da rede são sugeridos;
+a pasta pessoal é escolhida uma vez. Selecione a HP para fechamento/extratos e a
+Epson para obrigações. As configurações ficam em central.json no cadastro local.
+
+Escolha o nome do condomínio e a competência e clique em **Buscar arquivos**.
+Extratos vêm de ano/mês; nomes compostos são associados por palavras completas.
+Arquivos com nome genérico são conferidos pelo cabeçalho textual do PDF. Arquivos
+sem identificação segura não são associados por suposição. Use Vincular arquivo
+para corrigir casos especiais; vínculos de extrato valem só para aquela competência.
+O Word é procurado diretamente no Jurídico, sem subpastas. Mais de um candidato
+exige vinculação explícita. Não há filtro de competência para obrigações.
+
+Todos os extratos identificados ficam marcados. Use Todos os extratos, Desmarcar
+extratos ou clique na primeira coluna para escolher. Obrigações são opcionais,
+inicialmente desmarcadas, com preferência editável nas configurações.
+
+Compare obrigações antes de imprimir o relatório. O Word é aberto somente para
+leitura e exportado temporariamente para PDF. A comparação considera o texto de
+todas as páginas, incluindo tabelas, e normaliza espaços e capitalização; não
+compara cores, assinaturas gráficas ou aparência. PDFs digitalizados e formulários
+pedem revisão manual. Se houver diferenças, escolha explicitamente PDF pessoal ou
+Word atual. Abra os arquivos no Word/Acrobat, corrija manualmente e compare novamente
+quando necessário. A conferência manual é explícita e também guarda os hashes dos
+dois arquivos. Não há alteração ou substituição automática dos relatórios.
+
+Na HP, a sequência é capa, aprovação, anexo I, anexo II e extratos. Obrigações vão
+à outra impressora e devem ser colocadas à frente da capa na montagem física.
+A tela pede confirmação dos arquivos antes do envio. É enviada uma cópia, só frente,
+sem mudar a impressora padrão nem as preferências globais do Windows. A conclusão
+indica envio à fila, não comprova impressão física. Não há repetição automática
+após falhas. Cancelar impede próximos envios; páginas já impressas/enviadas devem
+ser conferidas na fila do Windows antes de tentar novamente.
+
+O Acrobat continua abrindo os PDFs para conferência. A impressão usa PDFium/GDI
+localmente, sem abrir uma janela para cada PDF e sem enviar documentos à internet.
+Conversões e cópias de leitura ficam apenas em uma pasta temporária, removida ao
+final inclusive em falhas. Arquivos alterados após a conferência bloqueiam o envio.
+Os testes de impressoras são simulados; confira o primeiro livro real na HP/Epson.
+
+---
+
 # Instalação do AutoWord no Windows
 
 Baixe **AutoWord-Setup.exe** na Release e execute uma vez. O instalador cria o

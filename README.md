@@ -55,3 +55,14 @@ O ícone é gerado em múltiplas resoluções no build a partir do desenho de do
 conferido em assets/autoword.svg. Pillow e PyInstaller são dependências apenas de build.
 O executável baixa o instalador oficial com hash verificado em segundo plano e o
 executa após o processo fechar; não tenta sobrescrever o próprio executável em uso.
+
+## Central por condomínio
+
+Central de impressão seleciona condomínio/competência, localiza fechamento, extratos
+e obrigações, com caminhos e impressoras configuráveis. Extratos são marcados por
+padrão e obrigações opcionais. Compara texto do PDF pessoal ao Word do Jurídico,
+sem competência e sem editar os originais. Divergências exigem escolher a versão.
+Impressão sequencial em uma cópia só frente via PDFium/GDI, com impressora separada
+para obrigações, sem automatizar janelas do Acrobat ou mudar o padrão do Windows.
+A conferência manual é explícita quando a leitura não é segura. Arquivos de exemplo
+e caminhos pessoais reais não são publicados.

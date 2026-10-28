@@ -80,7 +80,18 @@ def smoke_test():
         root=Path(folder)
         with patch('app.CONFIG',root/'responsaveis.json'),patch('app.MAPPINGS',root/'arquivos.json'),patch('app.DATA',root):
             app=App()
-            app.after(400,app.destroy)
+            from central_ui import CentralDialog,save_settings
+            from central_service import DEFAULTS
+            save_settings(root/'central.json',dict(DEFAULTS,root=str(root),statements=str(root),reports=str(root)))
+            central=CentralDialog(app,root/'central.json')
+            import pypdfium2 as pdfium
+            with pdfium.PdfDocument.new() as document:
+                page=document.new_page(100,100)
+                bitmap=page.render(scale=1)
+                image=bitmap.to_pil()
+                assert image.size==(100,100)
+                image.close();bitmap.close();page.close()
+            app.after(600,app.destroy)
             app.mainloop()
     return 0
 

@@ -102,6 +102,7 @@ class App(tk.Tk):
         ttk.Label(title, text='Documentos dos condomínios',
                   style='Muted.TLabel').pack(anchor='w', pady=(3, 0))
         self.button(header, 'Opções', self.options_dialog).pack(side='right')
+        self.button(header, 'Central de impressão', self.open_central).pack(side='right', padx=8)
 
         card = ttk.Frame(top, style='Card.TFrame', padding=12)
         card.grid(row=1, column=0, sticky='ew')
@@ -377,6 +378,19 @@ class App(tk.Tk):
         if selected:
             self.destination.set(selected)
 
+    def open_central(self):
+        if self.busy:return
+        from central_ui import CentralDialog
+        window=getattr(self,'central_window',None)
+        if window is not None and window.winfo_exists():
+            window.lift();window.grab_set();return
+        try:self.central_window=CentralDialog(self,DATA/'central.json')
+        except Exception as exc:messagebox.showerror('Central de impressão',str(exc),parent=self)
+
+    def central_settings(self):
+        from central_ui import settings_dialog
+        settings_dialog(self,DATA/'central.json')
+
     def options_dialog(self):
         dialog = getattr(self, 'options_window', None)
         if dialog is not None and dialog.winfo_exists():
@@ -406,6 +420,7 @@ class App(tk.Tk):
         def action(command):
             hide()
             self.after_idle(command)
+        ttk.Button(content,text='Central: pastas e impressoras…',command=lambda:action(self.central_settings)).pack(fill='x',pady=5)
         ttk.Button(content,text='Selecionar os 4 arquivos…',command=lambda:action(self.map_files)).pack(fill='x',pady=(18,5))
         ttk.Button(content,text='Editar responsáveis do selecionado…',command=lambda:action(self.edit_roster)).pack(fill='x',pady=5)
         ttk.Button(content,text='Importar planilha de responsáveis…',command=lambda:action(self.import_sheet)).pack(fill='x',pady=5)
@@ -827,7 +842,7 @@ class App(tk.Tk):
         self.invalidate()
 
     def watch_sheet(self):
-        if not self.busy:
+        if not self.busy and self.grab_current() is None:
             self.auto_regenerate()
             if not self.busy:
                 self.poll_sheet()
