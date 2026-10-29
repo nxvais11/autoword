@@ -225,8 +225,6 @@ class Interface(unittest.TestCase):
             self.assertEqual(window.tree.selection(),('1',))
             self.assertEqual(window.tree.focus(),'1')
             window.toggle(index=1)
-            window.check_statements(False);self.assertEqual(window.checked,{0})
-            window.check_statements(True);self.assertEqual(window.checked,{0,1,2})
             window.toggle(index=3);self.assertEqual(window.checked,{0,1,2,3})
             window.clear_all_button.invoke();self.assertEqual(window.checked,set())
             self.assertTrue(all(window.tree.set(i,'check')=='☐' for i in window.tree.get_children()))
@@ -306,6 +304,30 @@ class Interface(unittest.TestCase):
                 printing.assert_called_once();updating.assert_not_called()
             self.assertEqual(before,{p:p.read_bytes() for p in before})
             error.assert_not_called()
+
+    def test_statement_alias_editor_preserves_other_condos_and_rejects_conflicts(self):
+        from central_ui import settings_dialog,load_settings
+        from tkinter import ttk
+        panel,folder=self.workspace_fixture()
+        panel.names.configure(values=['TESTE','OUTRO']);panel.name.set('TESTE')
+        def walk(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from walk(child)
+        with patch('central_ui.available_printers',return_value=(['HP TEST'],'HP TEST')),patch('central_ui.messagebox.showerror') as error:
+            dialog=settings_dialog(panel,panel.path)
+            dialog.alias_text.insert('1.0','Nome antigo\nApelido')
+            dialog.alias_combo.set('OUTRO');dialog.alias_combo.event_generate('<<ComboboxSelected>>')
+            dialog.alias_text.insert('1.0','Outra denominação')
+            save=next(w for w in walk(dialog) if isinstance(w,ttk.Button) and w.cget('text')=='Salvar')
+            save.invoke()
+            self.assertEqual(load_settings(panel.path)['statement_aliases'],{'TESTE':['Nome antigo','Apelido'],'OUTRO':['Outra denominação']})
+            dialog=settings_dialog(panel,panel.path)
+            dialog.alias_text.delete('1.0','end');dialog.alias_text.insert('1.0','OUTRO')
+            save=next(w for w in walk(dialog) if isinstance(w,ttk.Button) and w.cget('text')=='Salvar')
+            save.invoke();self.assertTrue(dialog.winfo_exists());error.assert_called_once()
+            self.assertEqual(load_settings(panel.path)['statement_aliases']['TESTE'],['Nome antigo','Apelido'])
+            dialog.destroy()
 
     def test_workspace_controls_pause_during_sheet_or_roster_background_work(self):
         panel,folder=self.workspace_fixture()

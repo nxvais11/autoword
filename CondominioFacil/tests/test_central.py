@@ -9,7 +9,7 @@ from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from pypdf import PdfWriter
 from pypdf.generic import NameObject,DictionaryObject,DecodedStreamObject
-from central_service import DEFAULTS,catalog,owner,search,selected_plan,verify_plan,compare_texts,compare_reports,digest
+from central_service import DEFAULTS,catalog,owner,search,selected_plan,verify_plan,compare_texts,compare_reports,digest,statement_owners,validate_statement_aliases
 from central_print import print_pdf,execute_plan
 from engine import FILES
 
@@ -65,6 +65,34 @@ class Central(unittest.TestCase):
         self.assertFalse(any(r['path'] and r['path'].name.startswith('Extrato Mensal') for r in result['rows']))
         pdf(self.month/'Extrato Mensal_Setembro2026.pdf','CONDOMINIO DO EDIFICIO ALFA')
         self.assertTrue(any(r['path'] and r['path'].name.startswith('Extrato Mensal') for r in self.lookup()['rows']))
+    def test_statement_aliases_match_names_and_headers_across_periods_only(self):
+        self.cfg['statement_aliases']={'ALFA':['Nome Antigo', 'Código 789.pdf']}
+        pdf(self.month/'NOME ANTIGO aplicacao.pdf')
+        pdf(self.month/'CODIGO 789 poup.pdf')
+        pdf(self.month/'Nome Antigomais.pdf')
+        pdf(self.month/'Generico.pdf','CONDOMINIO NOME ANTIGO')
+        found={r['path'].name for r in self.lookup()['rows'] if r['group']=='statement'}
+        self.assertEqual(found,{'ALFA.pdf','ALFA poup.pdf','NOME ANTIGO aplicacao.pdf','CODIGO 789 poup.pdf','Generico.pdf'})
+        pdf(Path(self.cfg['statements'])/'2026'/'10'/'NOME ANTIGO.pdf')
+        result=search(self.cfg,'ALFA',10,2026)
+        self.assertEqual([r['path'].name for r in result['rows'] if r['group']=='statement'],['NOME ANTIGO.pdf'])
+        # Os nomes de relatórios não passam a usar os aliases de extratos.
+        self.assertEqual(self.lookup()['rows'][-1]['path'].name,'RELATORIO DE OBRIGACOES ALFA.pdf')
+
+    def test_alias_collisions_are_rejected_and_ambiguous_saved_files_not_selected(self):
+        with self.assertRaisesRegex(ValueError,'mais de um'):
+            validate_statement_aliases({'ALFA':['apelido'],'ALFA JARDIM':['Apélido.pdf']},['ALFA','ALFA JARDIM'])
+        with self.assertRaisesRegex(ValueError,'mais de um'):
+            validate_statement_aliases({'ALFA':['Condomínio ALFA JARDIM']},['ALFA','ALFA JARDIM'])
+        self.cfg['statement_aliases']={'ALFA':['MESMO NOME'],'ALFA JARDIM':['MESMO NOME']}
+        pdf(self.month/'MESMO NOME.pdf','CONDOMINIO ALFA')
+        result=self.lookup()
+        self.assertFalse(any(r['path'] and r['path'].name=='MESMO NOME.pdf' for r in result['rows']))
+        self.assertTrue(any('ambíguo' in warning for warning in result['warnings']))
+        self.assertEqual(statement_owners('ALFA JARDIM poup',['ALFA','ALFA JARDIM']),{'ALFA JARDIM'})
+        self.assertEqual(statement_owners('ALFA e MESMO NOME',['ALFA','ALFA JARDIM'],self.cfg['statement_aliases']),{'ALFA','ALFA JARDIM'})
+        self.assertEqual(statement_owners('Nome órfão',['ALFA'],{'OUTRO':['Nome órfão']}),set())
+
     def test_reports_have_no_competence_and_ambiguous_legal_requires_binding(self):
         first=self.lookup();next_month=search(self.cfg,'ALFA',10,2026)
         self.assertEqual(first['word'],next_month['word'])

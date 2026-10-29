@@ -9,7 +9,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk,filedialog,messagebox
-from central_service import DEFAULTS,LABELS,catalog,search,compare_reports,selected_plan,digest
+from central_service import DEFAULTS,LABELS,catalog,search,compare_reports,selected_plan,digest,validate_statement_aliases
 from central_print import execute_plan
 from obligations import check_obligations
 from word_service import Word,discover
@@ -42,6 +42,33 @@ def settings_dialog(parent,path,on_saved=None):
     tabs=ttk.Notebook(shell);tabs.pack(fill='both',expand=True)
     paths=ttk.Frame(tabs,padding=12);update=ttk.Frame(tabs,padding=12)
     tabs.add(paths,text='Pastas e impressoras');tabs.add(update,text='Atualização e responsáveis')
+    aliases_tab=ttk.Frame(tabs,padding=12);tabs.add(aliases_tab,text='Nomes de extratos')
+    aliases=copy.deepcopy(settings.get('statement_aliases',{}))
+    owner=getattr(parent,'parent',parent)
+    known=list(parent.names.cget('values')) if hasattr(parent,'names') else [c['name'] for c in getattr(owner,'condos',[])]
+    alias_names=sorted(set(known)|set(aliases))
+    alias_name=tk.StringVar(value=parent.name.get() if hasattr(parent,'name') and parent.name.get() in alias_names else (alias_names[0] if alias_names else ''))
+    ttk.Label(aliases_tab,text='Condomínio',style='Section.TLabel').pack(anchor='w')
+    alias_combo=ttk.Combobox(aliases_tab,textvariable=alias_name,values=alias_names,state='readonly');alias_combo.pack(fill='x',pady=(4,12))
+    ttk.Label(aliases_tab,text='Nomes alternativos dos extratos — um por linha').pack(anchor='w')
+    alias_text=tk.Text(aliases_tab,height=9,wrap='word',font=('Segoe UI',10));alias_text.pack(fill='both',expand=True,pady=6)
+    ttk.Label(aliases_tab,text='Informe nomes ou apelidos específicos, sem o mês e o ano. Ex.: nome antigo do condomínio.\nO nome da pasta continua sendo reconhecido. Evite nomes genéricos como Extrato Mensal.\nAs alterações serão gravadas ao clicar em Salvar.',wraplength=650,style='Muted.TLabel').pack(anchor='w')
+    alias_current=[alias_name.get()]
+    def store_aliases():
+        name=alias_current[0]
+        if name:
+            entries=list(dict.fromkeys(v.strip() for v in alias_text.get('1.0','end').splitlines() if v.strip()))
+            if entries:aliases[name]=entries
+            else:aliases.pop(name,None)
+    def change_aliases(event=None):
+        store_aliases();alias_current[0]=alias_name.get()
+        alias_text.delete('1.0','end');alias_text.insert('1.0','\n'.join(aliases.get(alias_name.get(),[])))
+    alias_text.insert('1.0','\n'.join(aliases.get(alias_name.get(),[])))
+    alias_combo.bind('<<ComboboxSelected>>',change_aliases)
+    if not alias_names:
+        alias_text.configure(state='disabled')
+        ttk.Label(aliases_tab,text='Carregue os condomínios na Central para cadastrar os nomes.').pack(anchor='w')
+    dialog.alias_combo=alias_combo;dialog.alias_text=alias_text
     values={}
     for field,label in [('root','Pasta principal dos condomínios'),('statements','Extratos (pasta acima dos anos)'),('reports','PDFs pessoais de obrigações'),('destination','Salvar Words em (vazio: pasta original)')]:
         host=update if field=='destination' else paths
@@ -98,7 +125,8 @@ def settings_dialog(parent,path,on_saved=None):
     ttk.Button(update,text='Atualizações do aplicativo…',command=lambda:call(updates)).pack(anchor='w',pady=10)
     def save():
         try:
-            updated=dict(settings,**{k:v.get().strip() for k,v in values.items()},include_report=include.get(),
+            store_aliases();validate_statement_aliases(aliases,alias_names)
+            updated=dict(settings,**{k:v.get().strip() for k,v in values.items()},statement_aliases=aliases,include_report=include.get(),
                          update_kinds=[k for k,v in enumerate(kinds) if v.get()],create_subfolder=subfolder.get())
             if not updated['root'] or not updated['statements']:raise ValueError('Informe as pastas principais de condomínios e extratos.')
             save_settings(path,updated);dismiss()
@@ -159,8 +187,6 @@ class CentralView:
         self.tree.pack(side='left',fill='both',expand=True);scroll=ttk.Scrollbar(host,command=self.tree.yview);scroll.pack(side='right',fill='y');self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<Button-1>',self.click);self.tree.bind('<space>',self.toggle)
         row=ttk.Frame(body);row.grid(row=4,column=0,sticky='ew',pady=10)
-        self.action(row,'Todos os extratos',lambda:self.check_statements(True)).pack(side='left')
-        self.action(row,'Desmarcar extratos',lambda:self.check_statements(False)).pack(side='left',padx=6)
         self.action(row,'Abrir arquivo',self.open_file).pack(side='left',padx=6)
         self.action(row,'Vincular arquivo…',self.link).pack(side='left',padx=6)
         self.action(row,'Vincular Word Jurídico…',lambda:self.link(True)).pack(side='left')
@@ -365,14 +391,6 @@ class CentralView:
     def check_all(self,include):
         if self.busy or self.parent.busy or not self.result:return
         self.checked=set(range(len(self.result['rows']))) if include else set()
-        self.redraw()
-
-    def check_statements(self,include):
-        if not self.result:return
-        for i,row in enumerate(self.result['rows']):
-            if row['group']=='statement':
-                if include:self.checked.add(i)
-                else:self.checked.discard(i)
         self.redraw()
 
     def show_details(self,text):

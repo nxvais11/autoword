@@ -138,3 +138,17 @@ meses anteriores, inclusive de anos anteriores. Itens anteriores recebem uma
 indicação nos detalhes; datas futuras não geram este alerta. A referência é a
 competência escolhida, e não o relógio do computador. O relatório original
 continua sendo corrigido manualmente e sua impressão permanece opcional.
+
+## Nomes alternativos de extratos
+
+Em Opções → Nomes de extratos, escolha o condomínio e informe um nome alternativo
+por linha. Salvar mantém os nomes para todos os meses; o nome da pasta também
+continua válido. A identificação busca esses termos no nome do PDF ou no cabeçalho
+da primeira página, respeitando palavras inteiras, acentos e nomes compostos. Use
+nomes específicos, sem o mês/ano. O cadastro não renomeia nem copia arquivos e não
+altera a identificação dos relatórios de obrigações.
+
+Nomes iguais para condomínios diferentes são recusados ao salvar. Se o arquivo
+contiver nomes de mais de um condomínio, ele fica pendente com um aviso, sem
+escolha automática. Vincular arquivo continua disponível para exceções individuais
+na competência escolhida.

@@ -8,7 +8,7 @@ from word_service import discover,digest,print_layout,document_kind,filename_key
 
 DEFAULTS={'root':r'Z:\_CONDOMÍNIOS ATIVOS','statements':r'Z:\OFX E EXTRATOS','reports':'',
           'main_printer':'','report_printer':'','include_report':False,'overrides':{},
-          'update_kinds':[0,1,2,3],'destination':'','create_subfolder':False}
+          'statement_aliases':{},'update_kinds':[0,1,2,3],'destination':'','create_subfolder':False}
 ORDER=(1,0,2,3)
 LABELS=('Aprovação de contas','Capa do livro','Anexo I','Anexo II')
 
@@ -20,11 +20,37 @@ def identity(value):
     value=norm(value)
     return re.sub(r'^(?:(?:condominio|do|da|de|edificio|residencial) )+','',value)
 
-def owner(text,names):
+def alias_identity(value):
+    return identity(re.sub(r'\.pdf$', '', str(value).strip(), flags=re.I))
+
+def statement_owners(text,names,aliases=None):
     hay=' '+norm(text)+' '
-    matched=[n for n in names if identity(n) and ' '+identity(n)+' ' in hay]
-    longest=[n for n in matched if not any(n!=other and ' '+identity(n)+' ' in ' '+identity(other)+' ' for other in matched)]
-    return longest[0] if len(longest)==1 else None
+    entries=[(identity(name),name) for name in names]
+    for name,values in (aliases or {}).items():
+        if name in names:entries.extend((alias_identity(v),name) for v in values)
+    matched={(phrase,name) for phrase,name in entries if phrase and ' '+phrase+' ' in hay}
+    longest={(phrase,name) for phrase,name in matched
+             if not any(phrase!=other and ' '+phrase+' ' in ' '+other+' ' for other,_ in matched)}
+    return {name for _,name in longest}
+
+def owner(text,names):
+    found=statement_owners(text,names)
+    return next(iter(found)) if len(found)==1 else None
+
+def validate_statement_aliases(aliases,names):
+    """Recusa nomes normalizados iguais atribuídos a condomínios diferentes."""
+    if not isinstance(aliases,dict):raise ValueError('Cadastro de nomes de extratos inválido.')
+    used={}
+    for name in names:used.setdefault(identity(name),set()).add(name)
+    for name,values in aliases.items():
+        if not isinstance(values,list):raise ValueError('Informe um nome alternativo por linha.')
+        for value in values:
+            key=alias_identity(value)
+            if not key:raise ValueError('Nome alternativo vazio ou inválido para '+name)
+            others=used.get(key,set())-{name}
+            if others:raise ValueError(f'Nome "{value}" associado a mais de um condomínio: '+', '.join(sorted(others|{name})))
+            used.setdefault(key,set()).add(name)
+
 
 def catalog(settings):
     root=Path(settings['root'])
@@ -119,11 +145,17 @@ def search(settings,name,month,year,mappings=None,names=None):
         try:
             for path in sorted(folder.iterdir(),key=lambda p:norm(p.name)):
                 if not path.is_file() or path.suffix.lower()!='.pdf':continue
-                identified=owner(path.stem,names)
+                matched=statement_owners(path.stem,names,settings.get('statement_aliases'))
+                if len(matched)>1:
+                    warnings.append(path.name+': nome ambíguo entre '+', '.join(sorted(matched))+'. Confira os nomes em Opções ou vincule o arquivo.');continue
+                identified=next(iter(matched)) if matched else None
                 if identified is None:
                     try:
                         header='\n'.join(pdf_text(path,True).splitlines()[:25])[:1600]
-                        identified=owner(header,names)
+                        matched=statement_owners(header,names,settings.get('statement_aliases'))
+                        if len(matched)>1:
+                            warnings.append(path.name+': identificação ambígua entre '+', '.join(sorted(matched))+'. Vincule o arquivo correto.');continue
+                        identified=next(iter(matched)) if matched else None
                     except Exception as exc:
                         warnings.append(path.name+': identificação pendente — '+str(exc))
                 if identified==name:statements.append(path)
