@@ -465,6 +465,16 @@ class Interface(unittest.TestCase):
             self.app.events.put(('done',None));self.app.poll();self.app.update()
             close.assert_called_once()
 
+    def test_close_waits_for_excel_com_cleanup_without_requiring_another_click(self):
+        from types import SimpleNamespace
+        monitor=SimpleNamespace(path=Path('responsaveis.xls'))
+        self.app.sheet_monitor=monitor;self.app.sheet_polling=True
+        with patch.object(self.app,'destroy') as close:
+            self.app.close();close.assert_not_called()
+            self.assertTrue(self.app.close_pending)
+            self.app.events.put(('sheet_poll_done',monitor));self.app.poll();self.app.update()
+            close.assert_called_once()
+
     def test_open_combobox_popdown_does_not_break_periodic_monitor_or_shortcuts(self):
         from tkinter import ttk
         combo=next(control for control,_ in self.app.controls if isinstance(control,ttk.Combobox))

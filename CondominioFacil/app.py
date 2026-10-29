@@ -591,6 +591,7 @@ class App(tk.Tk):
                 elif kind == 'sheet_poll_done':
                     if value is self.sheet_monitor:
                         self.sheet_polling = False
+                        if getattr(self,'close_pending',False):self.after_idle(self.close)
                 elif kind == 'roster':
                     condo, rows = value
                     self.after(10, lambda c=condo, r=rows: self.roster_dialog(c, r))
@@ -1145,6 +1146,11 @@ class App(tk.Tk):
             messagebox.showinfo('Saída', 'Nenhum lote gerado nesta sessão.')
 
     def close(self):
+        if self.sheet_polling and self.sheet_monitor is not None and self.sheet_monitor.path.suffix.lower()=='.xls':
+            # Excel COM precisa liberar a pasta de trabalho antes de encerrar.
+            self.close_pending=True
+            self.status.set('Fechando após liberar a planilha aberta no Excel…')
+            return
         if self.busy:
             self.close_pending=True
             self.cancel.set()
