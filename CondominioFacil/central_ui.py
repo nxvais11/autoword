@@ -187,8 +187,6 @@ class CentralView:
         self.tree.pack(side='left',fill='both',expand=True);scroll=ttk.Scrollbar(host,command=self.tree.yview);scroll.pack(side='right',fill='y');self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<Button-1>',self.click);self.tree.bind('<space>',self.toggle)
         row=ttk.Frame(body);row.grid(row=4,column=0,sticky='ew',pady=10)
-        self.action(row,'Todos os extratos',lambda:self.check_statements(True)).pack(side='left')
-        self.action(row,'Desmarcar extratos',lambda:self.check_statements(False)).pack(side='left',padx=6)
         self.action(row,'Abrir arquivo',self.open_file).pack(side='left',padx=6)
         self.action(row,'Vincular arquivo…',self.link).pack(side='left',padx=6)
         self.action(row,'Vincular Word Jurídico…',lambda:self.link(True)).pack(side='left')
@@ -393,14 +391,6 @@ class CentralView:
     def check_all(self,include):
         if self.busy or self.parent.busy or not self.result:return
         self.checked=set(range(len(self.result['rows']))) if include else set()
-        self.redraw()
-
-    def check_statements(self,include):
-        if not self.result:return
-        for i,row in enumerate(self.result['rows']):
-            if row['group']=='statement':
-                if include:self.checked.add(i)
-                else:self.checked.discard(i)
         self.redraw()
 
     def show_details(self,text):

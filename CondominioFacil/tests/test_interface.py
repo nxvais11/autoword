@@ -225,8 +225,6 @@ class Interface(unittest.TestCase):
             self.assertEqual(window.tree.selection(),('1',))
             self.assertEqual(window.tree.focus(),'1')
             window.toggle(index=1)
-            window.check_statements(False);self.assertEqual(window.checked,{0})
-            window.check_statements(True);self.assertEqual(window.checked,{0,1,2})
             window.toggle(index=3);self.assertEqual(window.checked,{0,1,2,3})
             window.clear_all_button.invoke();self.assertEqual(window.checked,set())
             self.assertTrue(all(window.tree.set(i,'check')=='☐' for i in window.tree.get_children()))

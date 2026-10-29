@@ -14,8 +14,7 @@ para corrigir casos especiais; vínculos de extrato valem só para aquela compet
 O Word é procurado diretamente no Jurídico, sem subpastas. Mais de um candidato
 exige vinculação explícita. Não há filtro de competência para obrigações.
 
-Todos os extratos identificados ficam marcados. Use Todos os extratos, Desmarcar
-extratos ou clique na primeira coluna para escolher. Obrigações são opcionais,
+Todos os extratos identificados ficam marcados. Use Selecionar todos, Desmarcar todos ou clique na primeira coluna para escolher. Obrigações são opcionais,
 inicialmente desmarcadas, com preferência editável nas configurações.
 
 Compare obrigações antes de imprimir o relatório. O Word é aberto somente para
