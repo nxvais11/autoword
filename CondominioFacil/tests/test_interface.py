@@ -228,6 +228,16 @@ class Interface(unittest.TestCase):
             window.check_statements(False);self.assertEqual(window.checked,{0})
             window.check_statements(True);self.assertEqual(window.checked,{0,1,2})
             window.toggle(index=3);self.assertEqual(window.checked,{0,1,2,3})
+            window.clear_all_button.invoke();self.assertEqual(window.checked,set())
+            self.assertTrue(all(window.tree.set(i,'check')=='☐' for i in window.tree.get_children()))
+            window.select_all_button.invoke();self.assertEqual(window.checked,{0,1,2,3})
+            self.assertTrue(all(window.tree.set(i,'check')=='☑' for i in window.tree.get_children()))
+            self.assertEqual(window.tree.selection(),('1',))
+            window.toggle(index=3);self.assertEqual(window.checked,{0,1,2})
+            window.busy=True;window.check_all(False);self.assertEqual(window.checked,{0,1,2})
+            window.busy=False
+            self.app.busy=True;window.check_all(False);self.assertEqual(window.checked,{0,1,2})
+            self.app.busy=False
             window.month.set('Setembro');window.invalidate();self.assertIsNone(window.result)
             window.destroy()
         self.assertFalse(self.app.busy)

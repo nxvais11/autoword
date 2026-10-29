@@ -146,7 +146,8 @@ class CentralView:
         self.document_period=tk.StringVar(value='Competência dos Words: selecione um condomínio.')
         ttk.Label(legend,textvariable=self.document_period,style='Section.TLabel',wraplength=1000).pack(side='bottom',anchor='w',pady=(4,0))
         ttk.Label(legend,textvariable=self.book_status,style='Section.TLabel').pack(side='right')
-        ttk.Label(legend,text='☐ Não imprimir    ☑ Imprimir  •  Clique na caixinha para escolher. Recentes aparecem primeiro na lista.',style='Muted.TLabel').pack(side='left')
+        self.select_all_button=self.action(legend,'☑ Selecionar todos',lambda:self.check_all(True));self.select_all_button.pack(side='left')
+        self.clear_all_button=self.action(legend,'☐ Desmarcar todos',lambda:self.check_all(False));self.clear_all_button.pack(side='left',padx=6)
         host=ttk.Frame(body);host.grid(row=3,column=0,sticky='nsew')
         self.tree=ttk.Treeview(host,columns=('check','group','file','printer'),show='headings',selectmode='browse')
         for key,title,width in [('check','Imprimir',85),('group','Documento / ordem',195),('file','Arquivo',460),('printer','Impressora',280)]:
@@ -360,6 +361,11 @@ class CentralView:
         if index in self.checked:self.checked.remove(index)
         else:self.checked.add(index)
         self.redraw();return 'break'
+
+    def check_all(self,include):
+        if self.busy or self.parent.busy or not self.result:return
+        self.checked=set(range(len(self.result['rows']))) if include else set()
+        self.redraw()
 
     def check_statements(self,include):
         if not self.result:return
