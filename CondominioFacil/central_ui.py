@@ -19,6 +19,7 @@ from book_history import BookHistory,file_id
 from document_period import inspect_periods,period_summary
 from console_messages import search_message,operation_message,preview_message,message
 from workspace_cache import load_cache,save_cache,cache_key
+from central_service import alphabetical_names,matching_names,norm
 
 
 def load_settings(path):
@@ -47,7 +48,7 @@ def settings_dialog(parent,path,on_saved=None):
     aliases_tab=ttk.Frame(tabs,padding=12);tabs.add(aliases_tab,text='Nomes de extratos')
     aliases=copy.deepcopy(settings.get('statement_aliases',{}))
     owner=getattr(parent,'parent',parent)
-    known=list(parent.names.cget('values')) if hasattr(parent,'names') else [c['name'] for c in getattr(owner,'condos',[])]
+    known=list(parent.catalog_names) if hasattr(parent,'catalog_names') else [c['name'] for c in getattr(owner,'condos',[])]
     alias_names=sorted(set(known)|set(aliases))
     alias_name=tk.StringVar(value=parent.name.get() if hasattr(parent,'name') and parent.name.get() in alias_names else (alias_names[0] if alias_names else ''))
     ttk.Label(aliases_tab,text='Condomínio',style='Section.TLabel').pack(anchor='w')
@@ -151,6 +152,7 @@ class CentralView:
         self.operation=None;self.print_request=[];self.period_cache={}
         self.catalog_loading=False;self.workspace_loaded=False;self.catalog_cancel=threading.Event()
         self.loaded_key=None;self.batch_revision=0
+        self.catalog_names=()
         self.external_busy=False
         self.result=None;self.comparison=None;self.checked=set();self.busy=False;self.events=queue.Queue();self.cancel=parent.cancel
         if not embedded:
@@ -169,7 +171,7 @@ class CentralView:
         self.action(header,'Atualização em lote',self.open_batch).pack(side='right',padx=8)
         row=ttk.Frame(body);row.grid(row=1,column=0,sticky='ew')
         ttk.Label(row,text='Condomínio').pack(side='left')
-        self.names=ttk.Combobox(row,textvariable=self.name,state='readonly',width=38);self.names.pack(side='left',padx=8)
+        self.names=ttk.Combobox(row,textvariable=self.name,state='normal',width=38);self.names.pack(side='left',padx=8)
         from engine import MONTHS
         self.months=MONTHS
         self.month_box=ttk.Combobox(row,textvariable=self.month,values=[m.title() for m in MONTHS],state='readonly',width=13);self.month_box.pack(side='left',padx=5)
@@ -222,6 +224,9 @@ class CentralView:
         self.cancel_button=ttk.Button(footer,text='Cancelar',command=self.cancel.set,state='disabled');self.cancel_button.pack(side='right',padx=8)
         if not embedded:self.protocol('WM_DELETE_WINDOW',self.close)
         self.names.bind('<<ComboboxSelected>>',lambda e:self.query())
+        self.names.bind('<Return>',self.choose_typed_name)
+        self.names.bind('<Escape>',lambda e:self.name.set(''))
+        self.name_trace=self.name.trace_add('write',self.filter_names)
         self.month_box.bind('<<ComboboxSelected>>',lambda e:self.invalidate())
         self.month_trace=self.month.trace_add('write',lambda *args:self.invalidate())
         self.year_trace=self.year.trace_add('write',lambda *args:self.invalidate())
@@ -282,11 +287,26 @@ class CentralView:
             self.parent.apply_discovered(value['root'],value['condos'])
             keep=[str(i) for i,c in enumerate(value['condos']) if c['folder'] in selected]
             if keep:self.parent.tree.selection_set(keep);self.parent.selection_changed()
-        names=value['names']
-        if not cached and self.history.root_ready(self.settings['root']):names=self.history.ordered_names(self.settings['root'],names)
-        self.names.configure(values=names)
-        if self.name.get() not in names:self.name.set('');self.invalidate()
+        names=value['names'];self.set_names(names)
+        if self.result and self.result['name'] not in names:self.invalidate()
+        if self.name.get() and not matching_names(names,self.name.get()):self.name.set('');self.invalidate()
         self.workspace_loaded=True
+
+    def set_names(self,names):
+        self.catalog_names=alphabetical_names(names)
+        text=self.name.get()
+        self.names.configure(values=self.catalog_names if text in self.catalog_names else matching_names(self.catalog_names,text))
+
+    def filter_names(self,*args):
+        if self.busy or self.parent.busy:return
+        self.invalidate()
+        matches=matching_names(self.catalog_names,self.name.get())
+        self.names.configure(values=matches)
+        if self.name.get() and self.name.get() not in self.catalog_names:
+            self.status.set(f'{len(matches)} condomínio(s) encontrado(s). Selecione na lista ou pressione Enter.' if matches else 'Nenhum condomínio encontrado. Confira o nome digitado.')
+
+    def choose_typed_name(self,event=None):
+        self.query();return 'break'
 
     def resume(self):
         settings=load_settings(self.path)
@@ -304,10 +324,15 @@ class CentralView:
         try:
             name,month,year=self.context()
             if not name or not 2000<=year<=2099:raise ValueError('Selecione o condomínio e uma competência válida.')
+            if name not in self.catalog_names:
+                exact=[n for n in self.catalog_names if norm(n)==norm(name)]
+                matches=exact or matching_names(self.catalog_names,name)
+                if len(matches)!=1:raise ValueError('Selecione um condomínio na lista de resultados.' if matches else 'Nenhum condomínio encontrado com esse nome.')
+                name=matches[0];self.name.set(name)
         except Exception as exc:messagebox.showerror('Seleção',str(exc),parent=self);return
         self.invalidate()
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
-        names=tuple(self.names.cget('values'))
+        names=self.catalog_names
         self.document_period.set('Competência dos Words: consultando…')
         def work():
             result=search(settings,name,month,year,mappings,names=names)
@@ -345,7 +370,7 @@ class CentralView:
             if external:self.status.set('Atualizando dados em segundo plano…')
             for widget in self.controls:widget.configure(state='disabled' if external else 'normal')
             if not external:
-                self.names.configure(state='readonly');self.month_box.configure(state='readonly')
+                self.names.configure(state='normal');self.month_box.configure(state='readonly')
         try:
             for _ in range(40):
                 kind,value=self.events.get_nowait()
@@ -362,26 +387,26 @@ class CentralView:
                     else:
                         if self.embedded:self.apply_workspace(result)
                         else:
-                            self.names.configure(values=self.history.ordered_names(self.settings['root'],result));self.workspace_loaded=True
+                            self.set_names(result);self.workspace_loaded=True
                         if not self.result:self.status.set('Selecione condomínio e competência para atualizar ou imprimir.')
                         if getattr(self,'query_after_reload',False) and self.name.get():
                             self.query_after_reload=False;self.after_idle(self.query)
                 elif kind=='workspace':
                     self.parent.apply_discovered(value['root'],value['condos'])
-                    self.names.configure(values=self.history.ordered_names(self.settings['root'],value['names']))
+                    self.set_names(value['names'])
                     if self.name.get() not in value['names']:self.name.set('')
                     self.status.set('Selecione condomínio e competência para atualizar ou imprimir.')
                     if getattr(self,'query_after_reload',False) and self.name.get():
                         self.query_after_reload=False;self.after_idle(self.query)
                 elif kind=='catalog':
-                    self.names.configure(values=self.history.ordered_names(self.settings['root'],value))
+                    self.set_names(value)
                     current=self.parent.selected()
                     candidate=current[0]['name'] if len(current)==1 else self.name.get()
                     if candidate in value:self.name.set(candidate)
                     self.status.set('Selecione o nome do condomínio e busque os arquivos.')
                 elif kind=='search':
                     self.history.touch(self.settings['root'],value['name'])
-                    self.names.configure(values=self.history.ordered_names(self.settings['root'],self.names.cget('values')))
+                    self.set_names(self.catalog_names)
                     self.refresh_book_status()
                     self.result=value;self.show_period(value)
                     self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
@@ -410,7 +435,7 @@ class CentralView:
                 elif kind=='done':
                     self.busy=False;self.parent.busy=False
                     for widget in self.controls:widget.configure(state='normal')
-                    self.names.configure(state='readonly');self.month_box.configure(state='readonly');self.cancel_button.configure(state='disabled')
+                    self.names.configure(state='normal');self.month_box.configure(state='readonly');self.cancel_button.configure(state='disabled')
                     self.refresh_book_status()
                     self.parent.events.put(('central_done',None))
                     if getattr(self.parent,'close_pending',False):self.parent.after_idle(self.parent.close)
@@ -634,7 +659,7 @@ class CentralView:
         try:
             _,month,year=self.context();period=f'{year}-{month:02}'
         except ValueError:return
-        names=list(self.names.cget('values'));root=self.settings['root']
+        names=list(self.catalog_names);root=self.settings['root']
         dialog=tk.Toplevel(self);dialog.title('Controle mensal — '+period);dialog.transient(self.winfo_toplevel());dialog.grab_set();dialog.geometry('780x530')
         body=ttk.Frame(dialog,padding=16);body.pack(fill='both',expand=True)
         total=tk.StringVar(master=dialog)
@@ -709,6 +734,7 @@ class CentralView:
         self.catalog_cancel.set()
         if hasattr(self,'poll_callback'):self.after_cancel(self.poll_callback)
         if hasattr(self,'year_trace'):self.year.trace_remove('write',self.year_trace)
+        if hasattr(self,'name_trace'):self.name.trace_remove('write',self.name_trace)
         if hasattr(self,'month_trace'):self.month.trace_remove('write',self.month_trace)
         super().destroy()
 

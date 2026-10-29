@@ -36,6 +36,11 @@ plano. A lista não substitui a leitura e a validação dos arquivos antes de
 atualizar ou imprimir. Mudanças de pastas ou vínculos invalidam esse cache.
 Use **Atualizar lista** para procurar condomínios adicionados durante a sessão.
 
+O campo Condomínio mantém a lista em ordem alfabética, sem priorizar os últimos
+usados. Digite parte do nome para filtrar, sem diferenciar acentos ou maiúsculas.
+Selecione na lista ou pressione Enter quando houver um único resultado. Apagar a
+pesquisa mostra todos os nomes. O Controle mensal sempre inclui a lista completa.
+
 Consultas do catálogo e leituras comuns de planilha não impedem fechar a janela.
 Se houver uma operação em andamento com documentos, fechar solicita cancelamento
 e encerra o aplicativo automaticamente assim que a operação termina com segurança.
