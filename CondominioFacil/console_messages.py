@@ -27,11 +27,15 @@ def search_message(result,selected):
     if '\n' in period:attention.append(period.splitlines()[0]+' Abra Ver detalhes para conferir cada arquivo.')
     due=result.get('due_obligations',[])
     if due:
-        attention.append(f'Obrigações a revisar: {len(due)} até esta competência, incluindo meses anteriores.')
+        attention.append(f'Obrigações pendentes: {len(due)} com data anterior à competência. Solicite a correção do relatório.')
         attention.extend(due[:3])
         if len(due)>3:attention.append(f'Mais {len(due)-3} obrigação(ões) em Ver detalhes.')
+    issues=result.get('obligation_issues',[])
+    if issues and result.get('word'):
+        attention.append(f'Inconsistências/dados a corrigir nas obrigações: {len(issues)}.')
+        attention.extend(issues[:2])
     for warning in warnings:
-        if warning==result.get('due_notice') or warning==period:continue
+        if warning==result.get('due_notice') or warning==period or (result.get('word') and warning in issues):continue
         if not report_selected and warning.startswith(('PDF pessoal:','Word do Jurídico:')):continue
         if 'Próxima realização' in warning or warning.startswith('Word original não localizado'):
             attention.append('Não foi possível conferir os vencimentos das obrigações. Revise o Word do Jurídico.');continue
@@ -44,6 +48,10 @@ def search_message(result,selected):
     if not attention:lines.append('Pronto para a ação escolhida. Confira a seleção na lista acima.')
     details=[period]+warnings
     if result.get('due_notice') and result['due_notice'] not in details:details.append(result['due_notice'])
+    if result.get('obligation_checks'):
+        details.append('\nConferência dos prazos (Word original):')
+        for row in result['obligation_checks']:
+            details.append(f"{row['service']} — realização: {row['realized'] or '-'}; prazo: {row['term'] or '-'}; próxima: {row['next'] or '-'}; resultado: {row['status']}"+(f"; esperada: {row['expected']}" if row['expected'] else ''))
     details+=['\nArquivos localizados:']+[r['label']+': '+str(r.get('path') or 'não localizado') for r in rows]
     return message('\n'.join(lines),'\n'.join(details))
 

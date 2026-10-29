@@ -128,7 +128,9 @@ uma ação de só impressão.
 
 PDFs são encaminhados ao Adobe Acrobat/Reader instalado pelo comando /t com o
 nome, driver e porta da impressora selecionada. O AutoWord não converte as páginas
-em imagens nem regrava o PDF. O Adobe pode aparecer durante o envio. Configure uma
+em imagens nem regrava o PDF. A impressão usa uma instância separada, iniciada
+oculta/minimizada e fechada após a confirmação de recebimento pela fila. Janelas
+do Adobe abertas pelo usuário não são encerradas. Configure uma
 cópia e somente frente nas preferências das duas impressoras. Preferências incompatíveis
 ou Adobe ausente são informados antes de iniciar a impressão. Não é alterada a
 impressora padrão do Windows.
@@ -183,11 +185,24 @@ Um cache em memória por caminho e conteúdo evita reler arquivos inalterados, e
 consulta é renovada depois da atualização. Esta identificação não substitui a
 conferência opcional das alterações nem muda o fluxo de impressão.
 
-O alerta de Próxima realização considera datas do mês escolhido e de todos os
-meses anteriores, inclusive de anos anteriores. Itens anteriores recebem uma
-indicação nos detalhes; datas futuras não geram este alerta. A referência é a
-competência escolhida, e não o relógio do computador. O relatório original
-continua sendo corrigido manualmente e sua impressão permanece opcional.
+A conferência lê Serviços, Realização, Prazo e Próxima realização no Word original.
+Somente uma próxima realização em mês **anterior** à competência é marcada como
+pendente. Datas do próprio mês e datas futuras não são pendências. A referência é
+a competência escolhida, sem depender do relógio do computador.
+
+O prazo informado é somado à realização para conferir a próxima data. São aceitos
+prazos em dias, meses, anos e periodicidades como mensal, semestral e anual.
+Com datas completas, prazos em meses/anos aceitam o aniversário ou a véspera,
+usada em vigências inclusivas; em fins de mês, o cálculo usa o último dia válido.
+Se alguma data tiver apenas mês/ano, confere-se essa precisão sem inventar o dia.
+Um prazo em dias exige realização com dia informado. Periodicidade desconhecida,
+data inválida ou dado necessário ausente gera aviso de conferência/correção.
+
+Inconsistências de prazo são separadas das pendências por competência, inclusive
+quando a próxima data é futura. Renovação automática não vira pendência por falta
+de data. Linhas sem realização e sem próxima data não recebem vencimento inventado.
+O aviso identifica o serviço, os valores lidos e o que precisa ser corrigido.
+O relatório continua sendo corrigido manualmente e sua impressão é opcional.
 
 ## Nomes alternativos de extratos
 

@@ -412,9 +412,10 @@ class CentralView:
                     self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
                     self.redraw();self.show_details(search_message(value,self.checked))
                     self.status.set('Consulta concluída. Confira o resumo e a seleção dos documentos.')
-                    if value.get('due_notice'):
-                        self.status.set('Atenção: há obrigações nesta competência ou em meses anteriores.')
-                        messagebox.showwarning('Revisar obrigações — '+value['name'],value['due_notice'],parent=self)
+                    notice=value.get('obligation_notice') or value.get('due_notice')
+                    if notice:
+                        self.status.set('Revise as obrigações: há pendências anteriores ou inconsistências a corrigir.')
+                        messagebox.showwarning('Corrigir relatório de obrigações — '+value['name'],notice,parent=self)
                 elif kind=='duplicates':
                     text,answer,ready=value
                     answer.append(messagebox.askyesno('Possível impressão repetida',text,parent=self))

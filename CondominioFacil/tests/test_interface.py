@@ -467,6 +467,25 @@ class Interface(unittest.TestCase):
             self.assertIsNone(panel.result)
             panel.name.set('');self.assertEqual(panel.names.cget('values'),names)
 
+    def test_future_obligation_inconsistency_requests_correction_even_when_not_selected(self):
+        import copy
+        from obligations import check_obligations
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.month.set('Setembro');panel.year.set('2026')
+            panel.query();self.wait_central(panel)
+        result=copy.deepcopy(panel.result);result['word']=Path('original.doc')
+        table=[[['SERVIÇOS','REALIZAÇÃO','PRAZO','PRÓXIMA REALIZAÇÃO'],['CERTIFICADO DIGITAL','09/2026','ANUAL','09/2028']]]
+        with patch('obligations.digest',return_value='hash'),patch('obligations.read_tables',return_value=table):
+            check_obligations(result,9,2026)
+        self.assertFalse(result['due_obligations'])
+        with patch('central_ui.messagebox.showwarning') as warning:
+            panel.events.put(('search',result));panel.poll()
+            warning.assert_called_once()
+            self.assertIn('esperada em 09/2027',warning.call_args.args[1])
+        self.assertTrue(all(i not in panel.checked for i,row in enumerate(result['rows']) if row['group']=='obligations'))
+        self.assertIn('Inconsistências/dados a corrigir',panel.details.get('1.0','end'))
+
     def test_warm_start_uses_cache_while_network_scan_runs_and_can_close(self):
         import threading
         panel,folder=self.workspace_fixture()

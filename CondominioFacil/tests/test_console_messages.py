@@ -29,7 +29,7 @@ class ConsoleMessages(unittest.TestCase):
         result['due_notice']='Confira todos:\n'+'\n'.join(result['due_obligations'])
         result['warnings']+=[result['due_notice'],'Extrato ambíguo: confira os nomes em Opções.']
         value=search_message(result,{0})
-        self.assertIn('12 até esta competência',value['summary'])
+        self.assertIn('12 com data anterior à competência',value['summary'])
         self.assertNotIn('SERVIÇO 11',value['summary'])
         self.assertIn('SERVIÇO 11',value['details'])
         self.assertIn('Extrato ambíguo',value['summary'])
