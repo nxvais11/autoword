@@ -45,18 +45,44 @@ def preflight(printers):
     for printer in printers:printer_info(printer)
 
 
+def close_print_instance(process,log=lambda text:None):
+    """Fecha somente o processo /n iniciado para esta impressão, após o spool."""
+    try:
+        if process.poll() is not None:return
+        import win32gui,win32process
+        def close_window(hwnd,_):
+            try:
+                if win32process.GetWindowThreadProcessId(hwnd)[1]==process.pid:
+                    win32gui.PostMessage(hwnd,0x0010,0,0)  # WM_CLOSE apenas neste PID.
+            except Exception:pass  # Uma janela pode desaparecer durante a enumeração.
+        win32gui.EnumWindows(close_window,None)
+        try:process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            # O spool já recebeu o PDF; nunca encerra outro Acrobat pelo nome.
+            process.terminate();process.wait(timeout=2)
+    except Exception:
+        # Não transforma um envio confirmado em falha com risco de reimpressão.
+        log('PDF enviado à fila. Não foi possível fechar a instância de impressão do Adobe; feche essa janela manualmente.')
+
+
 def print_pdf(path,printer,cancel,log=lambda text:None,*,timeout=90):
     """Aguarda o trabalho correspondente entrar e terminar de carregar na fila."""
     import win32print
     source=Path(path).resolve(strict=True)
     exe=acrobat_executable();info=printer_info(printer)
     handle=win32print.OpenPrinter(printer)
+    process=None;confirmed=False
     try:
         before={j['JobId'] for j in win32print.EnumJobs(handle,0,9999,1)}
         if cancel.is_set():return False
         # Lista de argumentos: caminhos, nomes e portas não passam por um shell.
-        subprocess.Popen([str(exe),'/t',str(source),printer,info['pDriverName'],info['pPortName']],
-                         creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        options={'creationflags':getattr(subprocess,'CREATE_NO_WINDOW',0)}
+        if os.name=='nt':
+            startup=subprocess.STARTUPINFO();startup.dwFlags|=subprocess.STARTF_USESHOWWINDOW;startup.wShowWindow=0
+            options['startupinfo']=startup
+        # /n isola esta impressão das janelas já abertas pelo usuário.
+        # /h /s /o evitam a janela principal, a abertura de arquivo e o splash.
+        process=subprocess.Popen([str(exe),'/n','/h','/s','/o','/t',str(source),printer,info['pDriverName'],info['pPortName']],**options)
         log(source.name+': aguardando o Adobe enviar à fila de '+printer)
         deadline=time.monotonic()+timeout;job_id=None
         names=[source.name.casefold(),source.stem.casefold()]
@@ -75,13 +101,17 @@ def print_pdf(path,printer,cancel,log=lambda text:None,*,timeout=90):
                 if matches:job_id=matches[0]['JobId']
             if job_id is not None:
                 job=next((j for j in jobs if j['JobId']==job_id),None)
-                if job is None:return True
+                if job is None:confirmed=True;return True
                 status=job.get('Status',0)
                 errors=(win32print.JOB_STATUS_ERROR|win32print.JOB_STATUS_OFFLINE|win32print.JOB_STATUS_PAPEROUT|win32print.JOB_STATUS_BLOCKED_DEVQ|win32print.JOB_STATUS_USER_INTERVENTION)
                 if status&errors:raise ValueError('A impressora sinalizou um problema. Confira a fila antes de continuar; nenhum reenvio automático será feito.')
                 if not status&win32print.JOB_STATUS_SPOOLING:
                     log(source.name+': recebido pela fila de '+printer)
+                    confirmed=True
                     return True
             cancel.wait(.1)
         raise ValueError('Não foi possível confirmar o PDF na fila da impressora. Confira o Adobe e a fila antes de tentar novamente; o documento pode já ter sido enviado.')
-    finally:win32print.ClosePrinter(handle)
+    finally:
+        try:
+            if confirmed and process is not None:close_print_instance(process,log)
+        finally:win32print.ClosePrinter(handle)

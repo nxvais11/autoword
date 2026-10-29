@@ -357,7 +357,7 @@ class Interface(unittest.TestCase):
         self.app.busy=True;panel.poll()
         self.assertTrue(all(str(c.cget('state'))=='disabled' for c in panel.controls))
         self.app.busy=False;panel.poll()
-        self.assertEqual(str(panel.names.cget('state')),'readonly')
+        self.assertEqual(str(panel.names.cget('state')),'normal')
         self.assertEqual(str(panel.print_button.cget('state')),'normal')
 
     def test_history_summary_duplicate_confirmation_and_monthly_manual_completion(self):
@@ -431,6 +431,60 @@ class Interface(unittest.TestCase):
             self.app.open_central();self.app.update()
         self.assertIs(panel.result,original);self.assertEqual(panel.checked,checked)
         self.assertFalse(panel.catalog_loading);self.assertFalse(self.app.busy)
+
+    def test_condo_search_filters_names_without_reordering_or_reducing_monthly_control(self):
+        from tkinter import ttk
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.query();self.wait_central(panel)
+            result=dict(panel.result,name='ÁLFA JARDIM')
+            names=('ALFA','ÁLFA JARDIM','TESTE','ZETA')
+            panel.set_names(reversed(names))
+            panel.history.touch(panel.settings['root'],'ZETA')
+            panel.name.set('alf')
+            self.assertEqual(panel.names.cget('values'),names[:2])
+            self.assertIsNone(panel.result)
+            panel.monthly_control();self.app.update()
+            dialog=next(w for w in panel.winfo_children() if isinstance(w,tk.Toplevel))
+            def walk(widget):
+                for child in widget.winfo_children():
+                    yield child
+                    yield from walk(child)
+            tree=next(w for w in walk(dialog) if isinstance(w,ttk.Treeview))
+            self.assertEqual(len(tree.get_children()),4);dialog.destroy()
+            with patch('central_ui.search',return_value=result) as search,patch('central_ui.messagebox.showerror') as error:
+                panel.choose_typed_name()
+                search.assert_not_called();error.assert_called_once()
+            panel.name.set('jardim')
+            with patch('central_ui.search',return_value=result) as search:
+                panel.choose_typed_name();self.wait_central(panel)
+                self.assertEqual(search.call_args.kwargs['names'],names)
+            self.assertEqual(panel.name.get(),'ÁLFA JARDIM')
+            self.assertEqual(panel.names.cget('values'),names)
+            self.assertEqual(str(panel.names.cget('state')),'normal')
+            panel.name.set('nome inexistente')
+            self.assertEqual(tuple(panel.names.cget('values')),())
+            self.assertIsNone(panel.result)
+            panel.name.set('');self.assertEqual(panel.names.cget('values'),names)
+
+    def test_future_obligation_inconsistency_requests_correction_even_when_not_selected(self):
+        import copy
+        from obligations import check_obligations
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.month.set('Setembro');panel.year.set('2026')
+            panel.query();self.wait_central(panel)
+        result=copy.deepcopy(panel.result);result['word']=Path('original.doc')
+        table=[[['SERVIÇOS','REALIZAÇÃO','PRAZO','PRÓXIMA REALIZAÇÃO'],['CERTIFICADO DIGITAL','09/2026','ANUAL','09/2028']]]
+        with patch('obligations.digest',return_value='hash'),patch('obligations.read_tables',return_value=table):
+            check_obligations(result,9,2026)
+        self.assertFalse(result['due_obligations'])
+        with patch('central_ui.messagebox.showwarning') as warning:
+            panel.events.put(('search',result));panel.poll()
+            warning.assert_called_once()
+            self.assertIn('esperada em 09/2027',warning.call_args.args[1])
+        self.assertTrue(all(i not in panel.checked for i,row in enumerate(result['rows']) if row['group']=='obligations'))
+        self.assertIn('Inconsistências/dados a corrigir',panel.details.get('1.0','end'))
 
     def test_warm_start_uses_cache_while_network_scan_runs_and_can_close(self):
         import threading

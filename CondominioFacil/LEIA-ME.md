@@ -34,10 +34,10 @@ indica envio à fila, não comprova impressão física. Não há repetição aut
 após falhas. Cancelar impede próximos envios; páginas já impressas/enviadas devem
 ser conferidas na fila do Windows antes de tentar novamente.
 
-O Acrobat continua abrindo os PDFs para conferência. A impressão usa PDFium/GDI
-localmente, sem abrir uma janela para cada PDF e sem enviar documentos à internet.
-Conversões e cópias de leitura ficam apenas em uma pasta temporária, removida ao
-final inclusive em falhas. Arquivos alterados após a conferência bloqueiam o envio.
+O Acrobat continua abrindo os PDFs quando você pede para conferir. Para imprimir,
+o AutoWord usa uma instância separada do Adobe, iniciada oculta/minimizada e fechada
+assim que a fila confirma o recebimento do PDF. Janelas abertas pelo usuário são
+preservadas. Arquivos alterados após a conferência bloqueiam o envio.
 Os testes de impressoras são simulados; confira o primeiro livro real na HP/Epson.
 
 ---
@@ -261,3 +261,5 @@ Adobe Acrobat/Reader instalado, sem transformação em imagem pelo aplicativo. N
 preferências das impressoras, configure uma cópia e somente frente. Se a Central
 não confirmar o PDF na fila, confira o Adobe e a fila antes de tentar novamente:
 o documento pode ter sido enviado, e o aplicativo não repete automaticamente.
+O fechamento automático ocorre somente após a confirmação do envio. Em falha ou
+cancelamento sem confirmação, a instância é preservada para conferir a fila.

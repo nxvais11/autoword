@@ -41,7 +41,7 @@ def build(version):
           '--specpath',str(ROOT/'build'),'--paths',str(APP)]
     for name in ('autoword.ico','update_config.json','requirements.txt','pdf_ocr.ps1'):
         args+=['--add-data',str(APP/name)+':.']
-    for name in ('win32com.client','pythoncom','pywintypes','win32timezone','win32file','win32api','win32event','win32print','win32cred','win32gui','win32con','PIL.ImageWin','pypdfium2','unittest.mock'):
+    for name in ('win32com.client','pythoncom','pywintypes','win32timezone','win32file','win32api','win32event','win32print','win32cred','win32gui','win32process','win32con','PIL.ImageWin','pypdfium2','unittest.mock'):
         args+=['--hidden-import',name]
     args += ['--collect-all','pypdfium2_raw','--collect-all','pypdfium2']
     # pdfminer carrega tabelas de caracteres/fontes dinamicamente.

@@ -20,6 +20,13 @@ def identity(value):
     value=norm(value)
     return re.sub(r'^(?:(?:condominio|do|da|de|edificio|residencial) )+','',value)
 
+def alphabetical_names(names):
+    return tuple(sorted(set(names),key=lambda name:(norm(name),name.casefold(),name)))
+
+def matching_names(names,text):
+    words=norm(text).split()
+    return tuple(name for name in alphabetical_names(names) if all(word in norm(name) for word in words))
+
 def alias_identity(value):
     return identity(re.sub(r'\.pdf$', '', str(value).strip(), flags=re.I))
 
