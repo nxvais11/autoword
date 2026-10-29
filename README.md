@@ -27,6 +27,14 @@ ou leitura incompleta exigem conferência manual; o Word original continua sendo
 a fonte da coluna Próxima realização. A comparação textual não verifica aparência
 de impressão, assinaturas gráficas ou conteúdo que exista apenas como imagem.
 
+## Mensagens da Central
+
+O painel Resumo mostra o resultado da consulta ou operação, documentos localizados,
+envios confirmados e os avisos que exigem ação. Os avisos aparecem antes das
+contagens. **Ver detalhes** abre caminhos completos, diferenças dos relatórios,
+alterações previstas e o registro da operação. A prévia agrupa alterações repetidas
+por documento; o conteúdo completo permanece disponível para conferência.
+
 ## Proteção do controle mensal
 
 O histórico é salvo localmente, fora da instalação, com gravação atômica e cópias

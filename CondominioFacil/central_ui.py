@@ -17,6 +17,7 @@ from central_update import prepare_closing,closing_condo,run_update
 from print_service import available_printers
 from book_history import BookHistory,file_id
 from document_period import inspect_periods,period_summary
+from console_messages import search_message,operation_message,preview_message,message
 
 
 def load_settings(path):
@@ -199,7 +200,14 @@ class CentralView:
         self.pdf_radio=ttk.Radiobutton(row,text='Usar PDF pessoal',variable=self.version,value='pdf',command=self.redraw);self.pdf_radio.pack(side='left',padx=10)
         self.word_radio=ttk.Radiobutton(row,text='Usar Word atual',variable=self.version,value='word',command=self.redraw);self.word_radio.pack(side='left')
         self.controls.extend((self.pdf_radio,self.word_radio))
-        self.details=tk.Text(body,height=5,wrap='word',state='disabled',font=('Segoe UI',10));self.details.grid(row=6,column=0,sticky='ew',pady=6)
+        summary=ttk.Frame(body);summary.grid(row=6,column=0,sticky='ew',pady=6)
+        toolbar=ttk.Frame(summary);toolbar.pack(fill='x')
+        ttk.Label(toolbar,text='Resumo',style='Section.TLabel').pack(side='left')
+        self.action(toolbar,'Ver detalhes',self.open_details).pack(side='right')
+        host=ttk.Frame(summary);host.pack(fill='both',expand=True)
+        self.details=tk.Text(host,height=5,wrap='word',state='disabled',font=('Segoe UI',10));self.details.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(host,command=self.details.yview);scroll.pack(side='right',fill='y');self.details.configure(yscrollcommand=scroll.set)
+        self.technical_details='';self.operation_log=[]
         footer=ttk.Frame(body);footer.grid(row=7,column=0,sticky='ew')
         ttk.Label(footer,textvariable=self.status,wraplength=740).pack(side='left',fill='x',expand=True)
         actions=ttk.Frame(body);actions.grid(row=8,column=0,sticky='ew',pady=(8,0))
@@ -229,6 +237,7 @@ class CentralView:
         self.result=None;self.comparison=None;self.checked.clear();self.tree.delete(*self.tree.get_children());self.version.set('pdf')
         self.status.set('Clique em Buscar arquivos para a seleção atual.')
         self.document_period.set('Competência dos Words: busque os arquivos para consultar.')
+        self.show_details('Busque os arquivos para consultar o resumo desta seleção.')
         self.refresh_book_status()
 
     def configure_paths(self):
@@ -267,7 +276,7 @@ class CentralView:
 
     def run(self,work,kind):
         if self.busy or self.parent.busy:return
-        self.busy=True;self.parent.busy=True;self.cancel.clear()
+        self.busy=True;self.parent.busy=True;self.cancel.clear();self.operation_log=[]
         for widget in self.controls:widget.configure(state='disabled')
         self.cancel_button.configure(state='normal');self.status.set('Processando…')
         tracking=None
@@ -282,15 +291,7 @@ class CentralView:
                 seconds=time.monotonic()-started
                 try:self.history.finish(tracking['root'],tracking['name'],tracking['period'],seconds,error)
                 except Exception as exc:error+='\nNão foi possível salvar o controle: '+str(exc)
-                confirmed={file_id(r) for r in tracking['sent']}
-                pending=[r['label'] for r in tracking['planned'] if file_id(r) not in confirmed]
-                lines=[f"{tracking['name']} — {tracking['period']}",f"Words verificados/atualizados: {tracking['words']}",f"Envios confirmados: {len(tracking['sent'])}",f"Tempo da operação: {seconds:.1f} s"]
-                if tracking['sent']:lines.append('Enviados: '+', '.join(r['label'] for r in tracking['sent']))
-                if pending:lines.append('Pendentes/sem confirmação: '+', '.join(pending))
-                lines.append('Confira a saída física antes de concluir o livro no Controle mensal.')
-                if error:lines.append(error)
-                elif result:lines.append(str(result))
-                result='\n'.join(lines)
+                result=operation_message(tracking,seconds,error,result)
             self.events.put(('error' if error else kind,result if tracking is not None else error if error else result))
             self.events.put(('done',None))
         threading.Thread(target=worker,daemon=False).start()
@@ -326,8 +327,8 @@ class CentralView:
                     self.refresh_book_status()
                     self.result=value;self.show_period(value)
                     self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
-                    self.redraw();self.show_details('\n'.join(value['warnings']) or 'Arquivos localizados. Selecione o que deseja imprimir.')
-                    self.status.set('Extratos: todos selecionados por padrão. Obrigações são opcionais e exigem conferência.')
+                    self.redraw();self.show_details(search_message(value,self.checked))
+                    self.status.set('Consulta concluída. Confira o resumo e a seleção dos documentos.')
                     if value.get('due_notice'):
                         self.status.set('Atenção: há obrigações nesta competência ou em meses anteriores.')
                         messagebox.showwarning('Revisar obrigações — '+value['name'],value['due_notice'],parent=self)
@@ -336,16 +337,18 @@ class CentralView:
                     answer.append(messagebox.askyesno('Possível impressão repetida',text,parent=self))
                     ready.set()
                 elif kind=='comparison':
-                    self.comparison=value;self.version.set('pdf' if value['equal'] else '');self.redraw();self.show_details(value['diff']);self.status.set('Textos equivalentes: será usado o PDF pessoal.' if value['equal'] else 'Há diferenças. Confira e escolha PDF pessoal ou Word atual antes de imprimir.')
+                    self.comparison=value;self.version.set('pdf' if value['equal'] else '');self.redraw()
+                    summary='Relatórios com textos equivalentes. Será usado o PDF pessoal.\nA aparência de impressão e as assinaturas gráficas não foram comparadas.' if value['equal'] else 'Há diferenças entre os relatórios.\nAbra Ver detalhes, confira as alterações e escolha PDF pessoal ou Word atual antes de imprimir.'
+                    self.show_details(message(summary,value['diff']));self.status.set('Comparação concluída. Confira o resumo.')
                 elif kind=='updated':
                     self.result=value;self.show_period(value);self.redraw()
-                    self.show_details('\n'.join(value.get('warnings',[])))
+                    self.show_details(search_message(value,self.checked))
                 elif kind=='preview_update':
                     self.show_details(value);self.status.set('Conferência concluída. Nenhum documento alterado.')
-                elif kind=='printed':self.status.set(value);self.show_details(value)
-                elif kind=='log':self.status.set(value)
+                elif kind=='printed':self.status.set('Operação finalizada. Confira o resumo.');self.show_details(value)
+                elif kind=='log':self.operation_log.append(str(value));self.status.set(str(value).splitlines()[0] if value else 'Processando…')
                 elif kind=='error':
-                    self.show_details(value);self.status.set('Não foi possível concluir. Confira os detalhes.');messagebox.showerror('Central de impressão',value,parent=self)
+                    self.show_details(value);self.status.set('Não foi possível concluir. Confira o resumo.');messagebox.showerror('Central de impressão',value['summary'] if isinstance(value,dict) else value,parent=self)
                 elif kind=='done':
                     self.busy=False;self.parent.busy=False
                     for widget in self.controls:widget.configure(state='normal')
@@ -358,8 +361,6 @@ class CentralView:
     def show_period(self,result):
         summary=period_summary(result)
         self.document_period.set(summary.split('\n')[0]+(' Confira os detalhes abaixo.' if '\n' in summary else ''))
-        if '\n' in summary:
-            result['warnings']=[summary]+result.get('warnings',[])
 
     def redraw(self):
         if not self.result:return
@@ -388,15 +389,27 @@ class CentralView:
             index=int(selected[0])
         if index in self.checked:self.checked.remove(index)
         else:self.checked.add(index)
-        self.redraw();return 'break'
+        self.redraw();self.show_details(search_message(self.result,self.checked));return 'break'
 
     def check_all(self,include):
         if self.busy or self.parent.busy or not self.result:return
         self.checked=set(range(len(self.result['rows']))) if include else set()
-        self.redraw()
+        self.redraw();self.show_details(search_message(self.result,self.checked))
 
     def show_details(self,text):
+        self.technical_details=text['details'] if isinstance(text,dict) else str(text)
+        if isinstance(text,dict) and self.operation_log:self.technical_details+='\n\nRegistro da operação:\n'+'\n'.join(self.operation_log)
+        if isinstance(text,dict) and self.comparison and self.comparison['diff'] not in self.technical_details:
+            self.technical_details+='\n\nComparação dos relatórios:\n'+self.comparison['diff']
+        text=text['summary'] if isinstance(text,dict) else str(text)
         self.details.configure(state='normal');self.details.delete('1.0','end');self.details.insert('end',text);self.details.configure(state='disabled')
+
+    def open_details(self):
+        dialog=tk.Toplevel(self);dialog.title('Detalhes da consulta ou operação');dialog.transient(self.winfo_toplevel());dialog.geometry('850x500')
+        host=ttk.Frame(dialog,padding=12);host.pack(fill='both',expand=True)
+        text=tk.Text(host,wrap='word',font=('Segoe UI',10));text.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(host,command=text.yview);scroll.pack(side='right',fill='y');text.configure(yscrollcommand=scroll.set)
+        text.insert('1.0',self.technical_details or 'Nenhuma consulta realizada.');text.configure(state='disabled')
 
     def report_paths(self):
         if not self.result:raise ValueError('Busque os arquivos primeiro.')
@@ -464,11 +477,7 @@ class CentralView:
         def work():
             with Word() as word:
                 condo,docs,target=prepare_closing(word,result,settings,month,year,state)
-            lines=[f"{condo['name']} — {month:02}/{year}",f'Destino: {target}']
-            for doc in docs:
-                lines.append(doc['path'].name)
-                lines.extend(f'  {c.old} → {c.new}' for c in doc['changes'] if c.old!=c.new)
-            return '\n'.join(lines)
+            return preview_message(condo['name'],month,year,target,docs)
         self.run(work,'preview_update')
 
     def update_selected(self,printing=False):

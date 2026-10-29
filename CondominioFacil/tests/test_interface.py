@@ -305,6 +305,29 @@ class Interface(unittest.TestCase):
             self.assertEqual(before,{p:p.read_bytes() for p in before})
             error.assert_not_called()
 
+    def test_console_summary_keeps_full_details_and_clears_old_condo_information(self):
+        from tkinter import ttk
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result),patch('central_ui.messagebox.showerror') as error:
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.query();self.wait_central(panel)
+            panel.result['warnings']=['PDF pessoal: 0 candidatos. Vincule o correto.']
+            panel.check_all(False)
+            self.assertNotIn('0 candidatos',panel.details.get('1.0','end'))
+            panel.open_details();self.app.update()
+            dialog=next(w for w in panel.winfo_children() if isinstance(w,tk.Toplevel))
+            def walk(widget):
+                for child in widget.winfo_children():
+                    yield child
+                    yield from walk(child)
+            text=next(w for w in walk(dialog) if isinstance(w,tk.Text))
+            self.assertIn('PDF pessoal: 0 candidatos',text.get('1.0','end'))
+            self.assertEqual(str(text.cget('state')),'disabled')
+            dialog.destroy()
+            panel.month.set('Dezembro')
+            self.assertIn('Busque os arquivos',panel.details.get('1.0','end'))
+            self.assertNotIn('0 candidatos',panel.technical_details)
+            error.assert_not_called()
+
     def test_statement_alias_editor_preserves_other_condos_and_rejects_conflicts(self):
         from central_ui import settings_dialog,load_settings
         from tkinter import ttk
