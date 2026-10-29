@@ -35,7 +35,9 @@ def due_rows(tables,month,year):
                 date(y,m,int(day) if day else 1)
             except ValueError:
                 issues.append(f'{row[0]}: data inválida ({value}).');continue
-            if (m,y)==(month,year):due.append(f'{row[0].strip()}: {value}')
+            if (y,m)<=(year,month):
+                suffix=' — anterior à competência' if (y,m)<(year,month) else ''
+                due.append(f'{row[0].strip()}: {value}'+suffix)
     if not found:issues.append('Coluna Próxima realização não localizada no Word original.')
     return list(dict.fromkeys(due)),list(dict.fromkeys(issues))
 
@@ -73,7 +75,7 @@ def check_obligations(result,month,year):
                 due=[];issues=['Word mudou durante a leitura. Consulte novamente.']
         except Exception as exc:issues=['Não foi possível verificar Próxima realização: '+str(exc)]
     result['due_obligations']=due
-    result['due_notice']=('Há obrigações previstas nesta competência. Revise o Word original antes de imprimir.\n'+'\n'.join(due)) if due else ''
+    result['due_notice']=(f'Há obrigações com Próxima realização até {month:02}/{year}, incluindo meses anteriores. Revise o Word original antes de imprimir.\n'+'\n'.join(due)) if due else ''
     if result['due_notice']:result['warnings'].insert(0,result['due_notice'])
     result['warnings'].extend(issues)
     return result

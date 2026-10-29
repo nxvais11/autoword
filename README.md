@@ -132,3 +132,9 @@ lido diretamente; DOC utiliza uma instância exclusiva do Word em leitura apenas
 Um cache em memória por caminho e conteúdo evita reler arquivos inalterados, e a
 consulta é renovada depois da atualização. Esta identificação não substitui a
 conferência opcional das alterações nem muda o fluxo de impressão.
+
+O alerta de Próxima realização considera datas do mês escolhido e de todos os
+meses anteriores, inclusive de anos anteriores. Itens anteriores recebem uma
+indicação nos detalhes; datas futuras não geram este alerta. A referência é a
+competência escolhida, e não o relógio do computador. O relatório original
+continua sendo corrigido manualmente e sua impressão permanece opcional.

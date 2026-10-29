@@ -300,7 +300,7 @@ class CentralView:
                     self.redraw();self.show_details('\n'.join(value['warnings']) or 'Arquivos localizados. Selecione o que deseja imprimir.')
                     self.status.set('Extratos: todos selecionados por padrão. Obrigações são opcionais e exigem conferência.')
                     if value.get('due_notice'):
-                        self.status.set('Atenção: há obrigações previstas nesta competência.')
+                        self.status.set('Atenção: há obrigações nesta competência ou em meses anteriores.')
                         messagebox.showwarning('Revisar obrigações — '+value['name'],value['due_notice'],parent=self)
                 elif kind=='duplicates':
                     text,answer,ready=value
