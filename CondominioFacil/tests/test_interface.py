@@ -553,7 +553,7 @@ class Interface(unittest.TestCase):
             warning.assert_called_once()
             self.assertIn('esperada em 09/2027',warning.call_args.args[1])
         self.assertTrue(all(i not in panel.checked for i,row in enumerate(result['rows']) if row['group']=='obligations'))
-        self.assertIn('Inconsistências/dados a corrigir',panel.details.get('1.0','end'))
+        self.assertIn('1 inconsistência(s) ou dado(s) a corrigir',panel.details.get('1.0','end'))
 
     def test_warm_start_uses_cache_while_network_scan_runs_and_can_close(self):
         import threading

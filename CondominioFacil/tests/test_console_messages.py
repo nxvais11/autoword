@@ -36,15 +36,15 @@ class ConsoleMessages(unittest.TestCase):
         self.assertEqual(value,search_message(result,{0}))
 
     def test_details_exclude_other_condos_and_repeated_network_paths(self):
-        result=self.fixture();result['name']='HILAL JABBOUR'
-        result['warnings']+=['capri.pdf: identificação ambígua entre BOM CLIMA, VILLA DE CAPRI. Vincule o arquivo correto.']
-        result['rows'][0]['path']=r'\\server\condominios\HILAL JABBOUR\CAPA LIVRO.doc'
+        result=self.fixture();result['name']='ATUAL'
+        result['warnings']+=['alheio.pdf: identificação ambígua entre OUTRO A, OUTRO B. Vincule o arquivo correto.']
+        result['rows'][0]['path']=r'\\server\condominios\ATUAL\CAPA LIVRO.doc'
         text=search_message(result,{0})['details']
-        self.assertIn('Condomínio: HILAL JABBOUR',text)
-        self.assertNotIn('BOM CLIMA',text);self.assertNotIn('VILLA DE CAPRI',text)
+        self.assertIn('Condomínio: ATUAL',text)
+        self.assertNotIn('OUTRO A',text);self.assertNotIn('OUTRO B',text)
         self.assertNotIn('server',text);self.assertIn('CAPA LIVRO.doc',text)
-        result['warnings']+=['hilal.pdf: identificação ambígua entre HILAL JABBOUR, OUTRO. Vincule o arquivo correto.']
-        self.assertIn('hilal.pdf',search_message(result,{0})['details'])
+        result['warnings']+=['atual.pdf: identificação ambígua entre ATUAL, OUTRO. Vincule o arquivo correto.']
+        self.assertIn('atual.pdf',search_message(result,{0})['details'])
 
     def test_partial_send_never_says_completed_or_repeats_success_instructions(self):
         row=dict(key='closing1',hash='abc',label='Capa')

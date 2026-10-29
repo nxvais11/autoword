@@ -54,7 +54,7 @@ def search_message(result,selected):
         if warning.startswith(('PDF pessoal:','Word do Jurídico:')):
             if ': 0 candidatos.' in warning:continue
             label='Relatório PDF' if warning.startswith('PDF pessoal:') else 'Word do Jurídico'
-            warning=label+': há mais de um arquivo. Vincule o correto.'
+            if ' candidatos.' in warning:warning=label+': há mais de um arquivo. Vincule o correto.'
             if not report_selected:continue
         if 'Próxima realização' in warning or warning.startswith('Word original não localizado'):
             warning='Não foi possível conferir as obrigações. Vincule ou revise o Word do Jurídico.'

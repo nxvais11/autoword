@@ -176,7 +176,7 @@ def search(settings,name,month,year,mappings=None,names=None):
                         # sobre todos os condomínios consultados.
                         pass
                 if identified==name:statements.append(path)
-        except OSError as exc:warnings.append('Extratos: '+str(exc))
+        except OSError:warnings.append('Extratos: pasta da competência indisponível. Confira o acesso à rede e as pastas em Opções.')
     if not statements:rows.append({'group':'statement','label':'Extrato não localizado','key':'statements:'+period,'path':None,'checked':True})
     for path in statements:rows.append({'group':'statement','label':'Extrato · '+path.name,'key':'statements:'+period,'path':path,'checked':True})
     reports=[];originals=[]
@@ -187,7 +187,8 @@ def search(settings,name,month,year,mappings=None,names=None):
             try:
                 candidates=[p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in extensions and 'obrig' in norm(p.stem)
                             and (key=='report_word' or owner(p.stem,names)==name)]
-            except OSError as exc:warnings.append(key+': '+str(exc))
+            except OSError:
+                warnings.append('Word do Jurídico: pasta indisponível. Use Vincular Word Jurídico para indicar o arquivo.' if key=='report_word' else 'PDF pessoal: pasta indisponível. Confira a pasta dos relatórios em Opções.')
         if len(candidates)!=1:
             warnings.append(('PDF pessoal' if key=='report_pdf' else 'Word do Jurídico')+f': {len(candidates)} candidatos. Vincule o correto.')
         if key=='report_pdf':reports=candidates
