@@ -73,14 +73,20 @@ def pdf_text(path,first=False):
     if reader.is_encrypted and not reader.decrypt(''):
         raise ValueError('PDF protegido por senha.')
     if not first and reader.get_fields():raise ValueError('PDF com formulário: confira os valores manualmente.')
-    pages=reader.pages[:1] if first else reader.pages
-    texts=[]
-    if not pages:raise ValueError('PDF sem páginas.')
-    for page in pages:
-        text=page.extract_text(extraction_mode='layout') or ''
+    if not reader.pages:raise ValueError('PDF sem páginas.')
+    # Cabeçalhos de extratos continuam no caminho rápido. Na comparação,
+    # pdfplumber inclui texto girado que o modo layout do pypdf omite.
+    if first:
+        texts=[reader.pages[0].extract_text(extraction_mode='layout') or '']
+    else:
+        import pdfplumber
+        with pdfplumber.open(path,password='') as document:
+            if len(document.pages)!=len(reader.pages):
+                raise ValueError('Leitura incompleta das páginas do PDF: confira o arquivo manualmente.')
+            texts=[page.extract_text(layout=False) or '' for page in document.pages]
+    for text in texts:
         if len(re.sub(r'\s','',text))<15:
             raise ValueError('PDF digitalizado ou sem texto legível: comparação/identificação exige conferência manual.')
-        texts.append(text)
     return '\n'.join(texts)
 
 def tokens(text):

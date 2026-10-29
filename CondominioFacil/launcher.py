@@ -93,6 +93,19 @@ def smoke_test():
             if '--smoke-report' in sys.argv:
                 Path(sys.argv[sys.argv.index('--smoke-report')+1]).write_text(f'Interface pronta em {app.startup_seconds:.3f} s',encoding='utf-8')
             import pypdfium2 as pdfium
+            # Exercita a dependência e seus dados também dentro do executável.
+            from pypdf import PdfWriter
+            from pypdf.generic import NameObject,DictionaryObject,DecodedStreamObject
+            from central_service import pdf_text
+            probe=root/'leitura.pdf'
+            writer=PdfWriter();page=writer.add_blank_page(width=300,height=100)
+            page[NameObject('/Resources')]=DictionaryObject({NameObject('/Font'):DictionaryObject({
+                NameObject('/F1'):DictionaryObject({NameObject('/Type'):NameObject('/Font'),
+                    NameObject('/Subtype'):NameObject('/Type1'),NameObject('/BaseFont'):NameObject('/Helvetica')})})})
+            stream=DecodedStreamObject();stream.set_data(b'BT /F1 12 Tf 10 50 Td (AUTOWORD PDF READING TEST) Tj ET')
+            page[NameObject('/Contents')]=writer._add_object(stream)
+            with probe.open('wb') as output:writer.write(output)
+            assert 'AUTOWORD PDF READING TEST' in pdf_text(probe)
             with pdfium.PdfDocument.new() as document:
                 page=document.new_page(100,100)
                 bitmap=page.render(scale=1)

@@ -44,6 +44,8 @@ def build(version):
     for name in ('win32com.client','pythoncom','pywintypes','win32timezone','win32file','win32api','win32event','win32print','win32cred','win32gui','win32con','PIL.ImageWin','pypdfium2','unittest.mock'):
         args+=['--hidden-import',name]
     args += ['--collect-all','pypdfium2_raw','--collect-all','pypdfium2']
+    # pdfminer carrega tabelas de caracteres/fontes dinamicamente.
+    args += ['--collect-all','pdfplumber','--collect-all','pdfminer']
     subprocess.run(args+[str(APP/'launcher.py')],check=True)
     exe=ROOT/'dist/windows/AutoWord/AutoWord.exe'
     check_executable(exe)

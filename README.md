@@ -20,6 +20,13 @@ O atualizador verifica o SHA-256 fornecido pelo GitHub, a versão interna e os a
 
 ## Privacidade dos documentos
 
+A comparação textual dos relatórios PDF usa pdfplumber, incluindo texto girado.
+A identificação de extratos pelo cabeçalho mantém a leitura rápida com pypdf.
+Ambos são carregados somente quando necessários. PDFs sem texto, com formulário
+ou leitura incompleta exigem conferência manual; o Word original continua sendo
+a fonte da coluna Próxima realização. A comparação textual não verifica aparência
+de impressão, assinaturas gráficas ou conteúdo que exista apenas como imagem.
+
 Este repositório contém somente código, instruções e testes sintéticos. Os PDFs e os documentos reais dos condomínios, o texto bruto de OCR, configurações locais e credenciais não são publicados. O pacote de Release é montado por uma lista de arquivos de programa; não inclui testes, exemplos ou documentos.
 
 ## Atualizar e imprimir na mesma tela
