@@ -366,6 +366,17 @@ class Interface(unittest.TestCase):
             with patch('central_ui.messagebox.askyesno',return_value=True):button.invoke()
             self.assertEqual(panel.book_status.get(),'Concluído')
             self.assertEqual(tree.set('0','status'),'Concluído')
+            restore=next(w for w in walk(dialog) if isinstance(w,ttk.Button) and w.cget('text')=='Restaurar controle')
+            before=panel.history.path.read_bytes()
+            restore.invoke();self.app.update()
+            recovery=next(w for w in dialog.winfo_children() if isinstance(w,tk.Toplevel))
+            apply=next(w for w in walk(recovery) if isinstance(w,ttk.Button) and w.cget('text')=='Restaurar')
+            with patch('central_ui.messagebox.askyesno',return_value=False):apply.invoke()
+            self.assertEqual(panel.history.path.read_bytes(),before)
+            with patch('central_ui.messagebox.askyesno',return_value=True),patch('central_ui.messagebox.showinfo'):
+                apply.invoke()
+            self.assertFalse(recovery.winfo_exists())
+            self.assertEqual(tree.set('0','status'),'Concluído')
             dialog.destroy();error.assert_not_called()
 
     def test_workspace_startup_does_not_resolve_network_paths_on_ui_thread(self):

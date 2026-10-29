@@ -144,6 +144,8 @@ class CentralView:
         self.embedded=embedded
         self.parent=parent;self.path=Path(path);self.settings=load_settings(path)
         self.history=BookHistory(self.path.with_name('livros.json'))
+        if self.history.recovery_notice:
+            self.after(0,lambda:messagebox.showinfo('Controle mensal recuperado',self.history.recovery_notice,parent=self))
         self.operation=None;self.print_request=[];self.period_cache={}
         self.external_busy=False
         self.result=None;self.comparison=None;self.checked=set();self.busy=False;self.events=queue.Queue();self.cancel=parent.cancel
@@ -599,6 +601,31 @@ class CentralView:
         ttk.Button(actions,text='Abrir condomínio',command=open_selected).pack(side='left')
         ttk.Button(actions,text='Concluir livro',command=lambda:complete(True)).pack(side='left',padx=8)
         ttk.Button(actions,text='Reabrir',command=lambda:complete(False)).pack(side='left')
+        def restore():
+            try:options=self.history.recovery_options(period)
+            except Exception as exc:
+                messagebox.showerror('Restaurar controle',str(exc),parent=dialog);return
+            if not options:
+                messagebox.showinfo('Restaurar controle','Não há registros salvos ou backup para esta competência. Não é possível reconstruir envios anteriores com segurança.',parent=dialog);return
+            recovery=tk.Toplevel(dialog);recovery.title('Restaurar controle — '+period);recovery.transient(dialog);recovery.grab_set()
+            shell=ttk.Frame(recovery,padding=16);shell.pack(fill='both',expand=True)
+            ttk.Label(shell,text='Escolha o histórico que pertence a esta pasta de condomínios.',wraplength=650).pack(anchor='w')
+            labels=[('Backup anterior' if Path(o['path'])==self.history.previous_backup else 'Backup recente' if Path(o['path'])==self.history.backup else 'Histórico salvo')+f" · {o['count']} registros · {o['root']}" for o in options]
+            choice=ttk.Combobox(shell,values=labels,state='readonly',width=85);choice.pack(fill='x',pady=12);choice.current(0)
+            ttk.Label(shell,text='Recupera somente '+period+' e os condomínios da lista atual.\nOs registros atuais serão preservados; nenhum documento será alterado.',wraplength=650).pack(anchor='w')
+            def dismiss():recovery.destroy();dialog.grab_set()
+            def apply():
+                if not messagebox.askyesno('Confirmar recuperação',f'Restaurar os registros selecionados para {period}?\nConfira a pasta de origem:\n'+options[choice.current()]['root'],parent=recovery):return
+                try:
+                    count=self.history.restore_month(options[choice.current()],root,period,names)
+                    dismiss();redraw();self.refresh_book_status()
+                    messagebox.showinfo('Controle restaurado',f'{count} registro(s) recuperado(s). Confira os status e os envios.',parent=dialog)
+                except Exception as exc:messagebox.showerror('Controle não restaurado',str(exc),parent=recovery)
+            buttons=ttk.Frame(shell);buttons.pack(fill='x',pady=(12,0))
+            ttk.Button(buttons,text='Restaurar',command=apply).pack(side='right')
+            ttk.Button(buttons,text='Cancelar',command=dismiss).pack(side='right',padx=8)
+            recovery.protocol('WM_DELETE_WINDOW',dismiss)
+        ttk.Button(actions,text='Restaurar controle',command=restore).pack(side='right')
         row=ttk.Frame(body);row.pack(fill='x')
         ttk.Label(row,text='Seu tempo manual por livro (min):').pack(side='left')
         baseline=tk.StringVar(master=dialog,value='' if self.history.data.get('manual_minutes') is None else str(self.history.data['manual_minutes']))

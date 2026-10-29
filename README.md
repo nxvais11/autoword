@@ -27,6 +27,21 @@ ou leitura incompleta exigem conferência manual; o Word original continua sendo
 a fonte da coluna Próxima realização. A comparação textual não verifica aparência
 de impressão, assinaturas gráficas ou conteúdo que exista apenas como imagem.
 
+## Proteção do controle mensal
+
+O histórico é salvo localmente, fora da instalação, com gravação atômica e cópias
+da versão recente e anterior. As janelas releem o histórico antes de salvar para preservar
+operações registradas por outra janela. A identidade da pasta de rede é mantida
+entre execuções, mesmo quando a resolução da unidade mapeada muda.
+
+Em **Controle mensal → Restaurar controle**, escolha os registros da competência
+atual no histórico ou no backup e confirme a origem. A recuperação combina os
+registros dos condomínios visíveis com os atuais, sem alterar documentos ou outros
+meses. Se o arquivo principal faltar ou estiver inválido e existir backup válido,
+o aplicativo recupera essa cópia e informa o ocorrido. Um arquivo inválido é
+preservado para análise. O backup pode não conter a última operação; registros
+que não existem em nenhuma cópia não podem ser reconstruídos automaticamente.
+
 Este repositório contém somente código, instruções e testes sintéticos. Os PDFs e os documentos reais dos condomínios, o texto bruto de OCR, configurações locais e credenciais não são publicados. O pacote de Release é montado por uma lista de arquivos de programa; não inclui testes, exemplos ou documentos.
 
 ## Atualizar e imprimir na mesma tela
