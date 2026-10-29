@@ -18,6 +18,7 @@ from print_service import available_printers
 from book_history import BookHistory,file_id
 from document_period import inspect_periods,period_summary
 from console_messages import search_message,operation_message,preview_message,message
+from workspace_cache import load_cache,save_cache,cache_key
 
 
 def load_settings(path):
@@ -148,6 +149,8 @@ class CentralView:
         if self.history.recovery_notice:
             self.after(0,lambda:messagebox.showinfo('Controle mensal recuperado',self.history.recovery_notice,parent=self))
         self.operation=None;self.print_request=[];self.period_cache={}
+        self.catalog_loading=False;self.workspace_loaded=False;self.catalog_cancel=threading.Event()
+        self.loaded_key=None;self.batch_revision=0
         self.external_busy=False
         self.result=None;self.comparison=None;self.checked=set();self.busy=False;self.events=queue.Queue();self.cancel=parent.cancel
         if not embedded:
@@ -161,6 +164,7 @@ class CentralView:
         header=ttk.Frame(body);header.grid(row=0,column=0,sticky='ew',pady=(0,10))
         ttk.Label(header,text='AutoWord',style='Title.TLabel').pack(side='left')
         self.action(header,'Opções',self.configure_paths).pack(side='right')
+        self.action(header,'Atualizar lista',self.reload).pack(side='right',padx=8)
         self.action(header,'Controle mensal',self.monthly_control).pack(side='right',padx=8)
         self.action(header,'Atualização em lote',self.open_batch).pack(side='right',padx=8)
         row=ttk.Frame(body);row.grid(row=1,column=0,sticky='ew')
@@ -245,15 +249,52 @@ class CentralView:
             settings_dialog(self,self.path,self.reload)
 
     def reload(self):
+        self.catalog_cancel.set();self.catalog_cancel=threading.Event()
         self.settings=load_settings(self.path);self.invalidate()
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
+        self.loaded_key=cache_key(settings['root'],mappings)
+        cached=load_cache(self.path.with_name('workspace_cache.json'),settings['root'],mappings) if self.embedded else None
+        if cached:
+            self.apply_workspace(cached,cached=True)
+            self.status.set('Lista carregada. Conferindo as pastas em segundo plano…')
+        else:self.status.set('Localizando condomínios em segundo plano… Você pode trocar de tela ou fechar.')
+        self.catalog_loading=True;cancel=self.catalog_cancel
         def work():
-            self.history.prepare_root(settings['root'])
-            names=catalog(settings)
-            if not self.embedded:return names
-            condos=[c for c in discover(settings['root'],mappings) if c['name'] in names] if names else []
-            return {'names':names,'condos':condos,'root':settings['root']}
-        self.run(work,'workspace' if self.embedded else 'catalog')
+            try:
+                self.history.prepare_root(settings['root'])
+                names=catalog(settings)
+                if cancel.is_set():return
+                if self.embedded:
+                    condos=[c for c in discover(settings['root'],mappings) if c['name'] in names] if names else []
+                    value={'names':names,'condos':condos,'root':settings['root']}
+                    if cancel.is_set():return
+                    try:save_cache(self.path.with_name('workspace_cache.json'),settings['root'],mappings,value)
+                    except OSError:pass  # Falha de cache não impede a consulta real.
+                else:value=names
+                if not cancel.is_set():self.events.put(('catalog_ready',(cancel,value,'')))
+            except Exception as exc:
+                if not cancel.is_set():self.events.put(('catalog_ready',(cancel,None,str(exc))))
+        threading.Thread(target=work,daemon=True).start()
+
+    def apply_workspace(self,value,cached=False):
+        if self.parent.condos!=value['condos'] or self.parent.folder.get()!=value['root']:
+            selected={c['folder'] for c in self.parent.selected()}
+            self.parent.apply_discovered(value['root'],value['condos'])
+            keep=[str(i) for i,c in enumerate(value['condos']) if c['folder'] in selected]
+            if keep:self.parent.tree.selection_set(keep);self.parent.selection_changed()
+        names=value['names']
+        if not cached and self.history.root_ready(self.settings['root']):names=self.history.ordered_names(self.settings['root'],names)
+        self.names.configure(values=names)
+        if self.name.get() not in names:self.name.set('');self.invalidate()
+        self.workspace_loaded=True
+
+    def resume(self):
+        settings=load_settings(self.path)
+        if settings!=self.settings or cache_key(settings['root'],self.parent.mappings)!=self.loaded_key:
+            self.reload();return
+        if getattr(self.parent,'document_revision',0)!=self.batch_revision:
+            self.invalidate()
+            if self.name.get():self.after_idle(self.query)
 
     def context(self):
         return self.name.get(),self.months.index(self.month.get().lower())+1,int(self.year.get())
@@ -308,7 +349,24 @@ class CentralView:
         try:
             for _ in range(40):
                 kind,value=self.events.get_nowait()
-                if kind=='workspace':
+                if kind=='catalog_ready':
+                    cancel,result,error=value
+                    if cancel is not self.catalog_cancel or cancel.is_set():continue
+                    grab=str(self.tk.call('grab','current',self._w))
+                    if self.busy or self.parent.busy or (grab and grab!=str(self)):
+                        self.events.put((kind,value));break
+                    self.catalog_loading=False
+                    if error:
+                        self.status.set('Pastas indisponíveis. '+('Lista anterior mantida; confira o acesso à rede.' if self.workspace_loaded else 'Confira as pastas e tente novamente em Opções.'))
+                        self.show_details(message('Não foi possível atualizar a lista de condomínios.\nConfira o acesso às pastas configuradas em Opções.',error))
+                    else:
+                        if self.embedded:self.apply_workspace(result)
+                        else:
+                            self.names.configure(values=self.history.ordered_names(self.settings['root'],result));self.workspace_loaded=True
+                        if not self.result:self.status.set('Selecione condomínio e competência para atualizar ou imprimir.')
+                        if getattr(self,'query_after_reload',False) and self.name.get():
+                            self.query_after_reload=False;self.after_idle(self.query)
+                elif kind=='workspace':
                     self.parent.apply_discovered(value['root'],value['condos'])
                     self.names.configure(values=self.history.ordered_names(self.settings['root'],value['names']))
                     if self.name.get() not in value['names']:self.name.set('')
@@ -355,6 +413,7 @@ class CentralView:
                     self.names.configure(state='readonly');self.month_box.configure(state='readonly');self.cancel_button.configure(state='disabled')
                     self.refresh_book_status()
                     self.parent.events.put(('central_done',None))
+                    if getattr(self.parent,'close_pending',False):self.parent.after_idle(self.parent.close)
         except queue.Empty:pass
         if self.winfo_exists():self.poll_callback=self.after(100,self.poll)
 
@@ -647,6 +706,7 @@ class CentralView:
         redraw()
 
     def destroy(self):
+        self.catalog_cancel.set()
         if hasattr(self,'poll_callback'):self.after_cancel(self.poll_callback)
         if hasattr(self,'year_trace'):self.year.trace_remove('write',self.year_trace)
         if hasattr(self,'month_trace'):self.month.trace_remove('write',self.month_trace)

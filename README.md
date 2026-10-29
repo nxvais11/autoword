@@ -27,6 +27,21 @@ ou leitura incompleta exigem conferência manual; o Word original continua sendo
 a fonte da coluna Próxima realização. A comparação textual não verifica aparência
 de impressão, assinaturas gráficas ou conteúdo que exista apenas como imagem.
 
+## Abertura e troca de telas
+
+A Central reaproveita o catálogo e a seleção ao voltar da atualização em lote,
+sem varrer as pastas novamente. Na abertura seguinte, usa uma lista local dos
+condomínios e caminhos já encontrados enquanto confere as pastas em segundo
+plano. A lista não substitui a leitura e a validação dos arquivos antes de
+atualizar ou imprimir. Mudanças de pastas ou vínculos invalidam esse cache.
+Use **Atualizar lista** para procurar condomínios adicionados durante a sessão.
+
+Consultas do catálogo e leituras comuns de planilha não impedem fechar a janela.
+Se houver uma operação em andamento com documentos, fechar solicita cancelamento
+e encerra o aplicativo automaticamente assim que a operação termina com segurança.
+Planilhas antigas XLS abertas pelo Excel aguardam a liberação do Excel antes de
+encerrar, sem exigir clicar em fechar novamente.
+
 ## Mensagens da Central
 
 O painel Resumo mostra o resultado da consulta ou operação, documentos localizados,

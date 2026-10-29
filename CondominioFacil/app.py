@@ -393,7 +393,7 @@ class App(tk.Tk):
             panel=getattr(self,'central_panel',None)
             if panel is None:
                 self.central_panel=panel=CentralPanel(self,DATA/'central.json')
-            elif not getattr(self,'workspace_active',False):panel.reload()
+            elif not getattr(self,'workspace_active',False):panel.resume()
             self.batch_view.pack_forget()
             panel.pack(fill='both',expand=True)
             self.workspace_active=True
@@ -408,13 +408,14 @@ class App(tk.Tk):
         if panel:
             panel.name.set(selected[0]['name'])
             panel.query_after_reload=True
-            if not panel.busy:
+            if not panel.busy and panel.workspace_loaded:
                 panel.query_after_reload=False;panel.query()
 
     def show_batch(self):
         if self.busy:return
         panel=getattr(self,'central_panel',None)
         if panel:
+            panel.batch_revision=getattr(self,'document_revision',0)
             panel.pack_forget()
             self.destination.set(panel.settings.get('destination',''))
             self.create_subfolder.set(panel.settings.get('create_subfolder',False))
@@ -552,6 +553,7 @@ class App(tk.Tk):
                     self.output = value
                     messages.append(f'Saída: {value}')
                 elif kind == 'job':
+                    self.document_revision=getattr(self,'document_revision',0)+1
                     folder, job = value
                     self.last_jobs[folder] = job
                     panel=getattr(self,'central_panel',None)
@@ -589,6 +591,7 @@ class App(tk.Tk):
                 elif kind == 'sheet_poll_done':
                     if value is self.sheet_monitor:
                         self.sheet_polling = False
+                        if getattr(self,'close_pending',False):self.after_idle(self.close)
                 elif kind == 'roster':
                     condo, rows = value
                     self.after(10, lambda c=condo, r=rows: self.roster_dialog(c, r))
@@ -621,6 +624,7 @@ class App(tk.Tk):
                     if self.pending_sheet is not None:
                         update, self.pending_sheet = self.pending_sheet, None
                         self.after(10,lambda v=update:self.accept_sheet_update(*v))
+                    if getattr(self,'close_pending',False):self.after_idle(self.close)
         except queue.Empty:
             pass
         self.log_many(messages)
@@ -1142,13 +1146,20 @@ class App(tk.Tk):
             messagebox.showinfo('Saída', 'Nenhum lote gerado nesta sessão.')
 
     def close(self):
-        if self.sheet_polling:
-            messagebox.showinfo('Aguarde','A leitura da planilha está em andamento. Aguarde terminar e feche novamente.')
+        if self.sheet_polling and self.sheet_monitor is not None and self.sheet_monitor.path.suffix.lower()=='.xls':
+            # Excel COM precisa liberar a pasta de trabalho antes de encerrar.
+            self.close_pending=True
+            self.status.set('Fechando após liberar a planilha aberta no Excel…')
             return
         if self.busy:
+            self.close_pending=True
             self.cancel.set()
-            messagebox.showinfo('Aguarde', 'Cancelamento solicitado. Aguarde o condomínio atual terminar e feche novamente.')
+            self.status.set('Fechando após concluir com segurança a operação em andamento…')
+            panel=getattr(self,'central_panel',None)
+            if panel is not None:panel.status.set(self.status.get())
         else:
+            panel=getattr(self,'central_panel',None)
+            if panel is not None:panel.catalog_cancel.set()
             if self.state_dirty:
                 self.save_runtime_state()
             self.destroy()

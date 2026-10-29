@@ -206,7 +206,7 @@ class Interface(unittest.TestCase):
         result=dict(name='CONDOMINIO TESTE',period='2026-09',rows=rows,word=None,warnings=[])
         def wait(window):
             until=time.monotonic()+5
-            while window.busy and time.monotonic()<until:
+            while (window.busy or window.catalog_loading) and time.monotonic()<until:
                 window.update();time.sleep(.01)
             self.assertFalse(window.busy)
         with patch('central_ui.catalog',return_value=['CONDOMINIO TESTE']),patch('central_ui.search',return_value=result):
@@ -243,12 +243,12 @@ class Interface(unittest.TestCase):
     def wait_central(self,window):
         import time
         until=time.monotonic()+5
-        while (window.busy or self.app.busy) and time.monotonic()<until:
+        while (window.busy or self.app.busy or window.catalog_loading) and time.monotonic()<until:
             self.app.update();time.sleep(.01)
         # A conclusão da Central é uma fila separada dos registros de geração do App.
         self.app.poll()
         self.app.update()
-        self.assertFalse(window.busy);self.assertFalse(self.app.busy)
+        self.assertFalse(window.busy);self.assertFalse(self.app.busy);self.assertFalse(window.catalog_loading)
 
     def workspace_fixture(self):
         from central_ui import save_settings
@@ -420,6 +420,60 @@ class Interface(unittest.TestCase):
             self.assertTrue(panel.winfo_ismapped())
             self.wait_central(panel)
             error.assert_not_called()
+
+    def test_return_to_central_reuses_loaded_catalog_and_document_selection(self):
+        with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
+            panel,folder=self.workspace_fixture()
+            panel.name.set('TESTE');panel.query();self.wait_central(panel)
+        original=panel.result;checked=set(panel.checked)
+        self.app.show_batch()
+        with patch('central_ui.catalog',side_effect=AssertionError('unnecessary rescan')),patch('central_ui.discover',side_effect=AssertionError('unnecessary rescan')):
+            self.app.open_central();self.app.update()
+        self.assertIs(panel.result,original);self.assertEqual(panel.checked,checked)
+        self.assertFalse(panel.catalog_loading);self.assertFalse(self.app.busy)
+
+    def test_warm_start_uses_cache_while_network_scan_runs_and_can_close(self):
+        import threading
+        panel,folder=self.workspace_fixture()
+        panel.destroy();self.app.central_panel=None
+        started=threading.Event();release=threading.Event()
+        from central_service import catalog as real_catalog
+        def slow_catalog(settings):
+            started.set();release.wait(3);return real_catalog(settings)
+        try:
+            with patch('central_ui.catalog',side_effect=slow_catalog):
+                self.app.open_central();panel=self.app.central_panel
+                self.assertTrue(started.wait(1))
+                self.assertIn('TESTE',panel.names.cget('values'))
+                self.assertTrue(panel.workspace_loaded);self.assertTrue(panel.catalog_loading)
+                self.assertFalse(panel.busy);self.assertFalse(self.app.busy)
+                self.app.show_batch();self.assertFalse(self.app.workspace_active)
+                self.app.open_central();self.assertTrue(self.app.workspace_active)
+                self.app.sheet_polling=True
+                with patch.object(self.app,'destroy') as close,patch('tkinter.messagebox.showinfo') as info:
+                    self.app.close();close.assert_called_once();info.assert_not_called()
+                self.assertTrue(panel.catalog_cancel.is_set())
+        finally:
+            self.app.sheet_polling=False;release.set()
+
+    def test_close_during_writing_requests_safe_cancel_and_closes_when_done(self):
+        self.app.busy=True
+        with patch.object(self.app,'destroy') as close,patch('tkinter.messagebox.showinfo') as info:
+            self.app.close()
+            self.assertTrue(self.app.cancel.is_set());self.assertTrue(self.app.close_pending)
+            close.assert_not_called();info.assert_not_called()
+            self.app.events.put(('done',None));self.app.poll();self.app.update()
+            close.assert_called_once()
+
+    def test_close_waits_for_excel_com_cleanup_without_requiring_another_click(self):
+        from types import SimpleNamespace
+        monitor=SimpleNamespace(path=Path('responsaveis.xls'))
+        self.app.sheet_monitor=monitor;self.app.sheet_polling=True
+        with patch.object(self.app,'destroy') as close:
+            self.app.close();close.assert_not_called()
+            self.assertTrue(self.app.close_pending)
+            self.app.events.put(('sheet_poll_done',monitor));self.app.poll();self.app.update()
+            close.assert_called_once()
 
     def test_open_combobox_popdown_does_not_break_periodic_monitor_or_shortcuts(self):
         from tkinter import ttk
