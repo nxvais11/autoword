@@ -16,7 +16,17 @@ Aplicativo Windows para atualizar, individualmente ou em lote, os documentos men
 
 O workflow .github/workflows/release.yml executa testes em Windows e verifica o pacote. Alterações de código na main publicam uma Release após os testes; pull requests somente testam. A versão é numerada automaticamente como major.minor.número da execução. O job de publicação usa o token automático do GitHub com contents: write; não é preciso upload manual de ZIP.
 
-O atualizador verifica o SHA-256 fornecido pelo GitHub, a versão interna e os arquivos permitidos antes da instalação. Mantém documentos e configurações locais; restaura o código anterior em falhas. A primeira instalação precisa ser feita uma vez; depois abra o aplicativo normalmente. O cache de verificação é de seis horas e pode ser limpo em Opções → Atualizações do aplicativo.
+Na instalação executável, o aplicativo consulta novas Releases em segundo plano ao
+abrir e a cada 30 minutos. Quando existe uma versão, um aviso aparece na tela
+principal, tanto na Central quanto no lote. Clique no aviso para baixar o instalador
+completo, validar seu SHA-256 e instalar silenciosamente com reinício. A instalação
+aguarda operações e janelas de edição terminarem, sem cancelar documentos por causa
+da atualização. Falhas são informadas e mantêm o aplicativo aberto para nova tentativa.
+Se o instalador falhar depois do fechamento, o iniciador tenta reabrir o aplicativo
+existente e informa o erro. Não há botão de verificação manual nem download antes
+do clique. PyInstaller onedir, Inno Setup, instalação por usuário e os dados em
+LocalAppData continuam separados. Instalações antigas por Python/ZIP mantêm o
+iniciador legado e sua verificação na abertura.
 
 ## Privacidade dos documentos
 
@@ -34,7 +44,9 @@ sem varrer as pastas novamente. Na abertura seguinte, usa uma lista local dos
 condomínios e caminhos já encontrados enquanto confere as pastas em segundo
 plano. A lista não substitui a leitura e a validação dos arquivos antes de
 atualizar ou imprimir. Mudanças de pastas ou vínculos invalidam esse cache.
-Use **Atualizar lista** para procurar condomínios adicionados durante a sessão.
+Use **Opções → Nomes de extratos → Atualizar lista** para procurar condomínios
+adicionados durante a sessão. O botão fica junto dos nomes alternativos e preserva
+o texto ainda não salvo enquanto atualiza as opções de condomínio.
 
 O campo Condomínio mantém a lista em ordem alfabética, sem priorizar os últimos
 usados. Digite parte do nome para filtrar, sem diferenciar acentos ou maiúsculas.
@@ -49,10 +61,14 @@ encerrar, sem exigir clicar em fechar novamente.
 
 ## Mensagens da Central
 
-O painel Resumo mostra o resultado da consulta ou operação, documentos localizados,
+O painel Resumo mostra somente o condomínio selecionado, o resultado da consulta ou operação, documentos localizados,
 envios confirmados e os avisos que exigem ação. Os avisos aparecem antes das
-contagens. **Ver detalhes** abre caminhos completos, diferenças dos relatórios,
-alterações previstas e o registro da operação. A prévia agrupa alterações repetidas
+contagens. **Ver detalhes** apresenta arquivos identificados, diferenças dos relatórios,
+alterações previstas e o registro da operação. Avisos de extratos que só envolvem
+outros condomínios são descartados; ambiguidades que envolvem o condomínio atual
+continuam exigindo conferência. Os detalhes usam nomes de arquivos, sem repetir
+caminhos de rede, e separam ações necessárias, obrigações e arquivos encontrados.
+A prévia agrupa alterações repetidas
 por documento; o conteúdo completo permanece disponível para conferência.
 
 ## Proteção do controle mensal

@@ -18,8 +18,8 @@ class ConsoleMessages(unittest.TestCase):
         result=self.fixture();value=search_message(result,{0})
         self.assertIn('1/1 documentos localizados',value['summary'])
         self.assertNotIn('candidatos',value['summary'])
-        self.assertIn('PDF pessoal: 0 candidatos',value['details'])
-        self.assertIn('Word do Jurídico: 0 candidatos',value['details'])
+        self.assertIn('Relatório PDF de obrigações: não localizado',value['details'])
+        self.assertIn('Word do Jurídico (fonte da conferência): não localizado',value['details'])
         value=search_message(result,{0,1})
         self.assertIn('Vincule os arquivos ausentes',value['summary'])
         self.assertIn('Relatório de obrigações',value['summary'])
@@ -34,6 +34,17 @@ class ConsoleMessages(unittest.TestCase):
         self.assertIn('SERVIÇO 11',value['details'])
         self.assertIn('Extrato ambíguo',value['summary'])
         self.assertEqual(value,search_message(result,{0}))
+
+    def test_details_exclude_other_condos_and_repeated_network_paths(self):
+        result=self.fixture();result['name']='HILAL JABBOUR'
+        result['warnings']+=['capri.pdf: identificação ambígua entre BOM CLIMA, VILLA DE CAPRI. Vincule o arquivo correto.']
+        result['rows'][0]['path']=r'\\server\condominios\HILAL JABBOUR\CAPA LIVRO.doc'
+        text=search_message(result,{0})['details']
+        self.assertIn('Condomínio: HILAL JABBOUR',text)
+        self.assertNotIn('BOM CLIMA',text);self.assertNotIn('VILLA DE CAPRI',text)
+        self.assertNotIn('server',text);self.assertIn('CAPA LIVRO.doc',text)
+        result['warnings']+=['hilal.pdf: identificação ambígua entre HILAL JABBOUR, OUTRO. Vincule o arquivo correto.']
+        self.assertIn('hilal.pdf',search_message(result,{0})['details'])
 
     def test_partial_send_never_says_completed_or_repeats_success_instructions(self):
         row=dict(key='closing1',hash='abc',label='Capa')
