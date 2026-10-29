@@ -463,7 +463,7 @@ class Interface(unittest.TestCase):
             self.assertEqual(panel.names.cget('values'),names)
             self.assertEqual(str(panel.names.cget('state')),'normal')
             panel.name.set('nome inexistente')
-            self.assertEqual(panel.names.cget('values'),())
+            self.assertEqual(tuple(panel.names.cget('values')),())
             self.assertIsNone(panel.result)
             panel.name.set('');self.assertEqual(panel.names.cget('values'),names)
 
