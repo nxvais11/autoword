@@ -164,6 +164,7 @@ class CentralView:
         header=ttk.Frame(body);header.grid(row=0,column=0,sticky='ew',pady=(0,10))
         ttk.Label(header,text='AutoWord',style='Title.TLabel').pack(side='left')
         self.action(header,'Opções',self.configure_paths).pack(side='right')
+        self.action(header,'Atualizar lista',self.reload).pack(side='right',padx=8)
         self.action(header,'Controle mensal',self.monthly_control).pack(side='right',padx=8)
         self.action(header,'Atualização em lote',self.open_batch).pack(side='right',padx=8)
         row=ttk.Frame(body);row.grid(row=1,column=0,sticky='ew')

@@ -34,6 +34,7 @@ sem varrer as pastas novamente. Na abertura seguinte, usa uma lista local dos
 condomínios e caminhos já encontrados enquanto confere as pastas em segundo
 plano. A lista não substitui a leitura e a validação dos arquivos antes de
 atualizar ou imprimir. Mudanças de pastas ou vínculos invalidam esse cache.
+Use **Atualizar lista** para procurar condomínios adicionados durante a sessão.
 
 Consultas do catálogo e leituras comuns de planilha não impedem fechar a janela.
 Se houver uma operação em andamento com documentos, fechar solicita cancelamento
