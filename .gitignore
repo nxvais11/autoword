@@ -15,3 +15,7 @@ CondominioFacil/Exemplos/
 responsaveis.json
 arquivos.json
 atualizacao.json
+livros.json
+livros.json.bak
+livros.json.previous.bak
+livros.corrompido-*.json

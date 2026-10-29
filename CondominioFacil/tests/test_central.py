@@ -18,7 +18,7 @@ def pdf(path,text='Document for testing only'):
     writer=PdfWriter();page=writer.add_blank_page(width=595,height=842)
     page[NameObject('/Resources')]=DictionaryObject({NameObject('/Font'):DictionaryObject({NameObject('/F1'):DictionaryObject({NameObject('/Type'):NameObject('/Font'),NameObject('/Subtype'):NameObject('/Type1'),NameObject('/BaseFont'):NameObject('/Helvetica')})})})
     stream=DecodedStreamObject();stream.set_data(('BT /F1 12 Tf 20 800 Td ('+text+') Tj ET').encode('ascii'))
-    page[NameObject('/Contents')]=stream
+    page[NameObject('/Contents')]=writer._add_object(stream)
     path.parent.mkdir(parents=True,exist_ok=True)
     with path.open('wb') as output:writer.write(output)
 

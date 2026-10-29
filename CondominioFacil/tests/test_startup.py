@@ -10,7 +10,7 @@ from book_history import BookHistory,file_id
 class Startup(unittest.TestCase):
     def test_loading_the_interface_does_not_import_pdf_engine(self):
         folder=str(Path(__file__).resolve().parents[1])
-        code="import sys;sys.path.insert(0,sys.argv[1]);import central_ui;assert 'pypdf' not in sys.modules"
+        code="import sys;sys.path.insert(0,sys.argv[1]);import central_ui;assert not {'pypdf','pdfplumber','pdfminer'} & sys.modules.keys()"
         result=subprocess.run([sys.executable,'-c',code,folder],capture_output=True,text=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stderr)
     def test_file_identity_with_key_never_resolves_a_network_path(self):

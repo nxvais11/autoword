@@ -60,6 +60,72 @@ class History(unittest.TestCase):
         self.path.parent.mkdir(exist_ok=True);self.path.write_text('{broken')
         with self.assertRaises(ValueError):BookHistory(self.path)
         self.assertEqual(self.path.read_text(),'{broken')
+
+    def test_two_live_views_cannot_overwrite_each_others_books(self):
+        other=BookHistory(self.path)
+        self.history.updated(self.root,'ALFA','2026-09',[0])
+        other.complete(self.root,'BETA','2026-09',True)
+        self.history.finish(self.root,'ALFA','2026-09',12)
+        fresh=BookHistory(self.path)
+        self.assertTrue(fresh.get(self.root,'BETA','2026-09')['complete'])
+        self.assertEqual(other.get(self.root,'ALFA','2026-09')['seconds'],12)
+
+    def test_network_resolution_change_keeps_the_saved_root_identity(self):
+        with patch('book_history.Path.resolve',return_value=Path('/server/share')):
+            self.history.prepare_root('Z:/Condos')
+            self.history.complete('Z:/Condos','ALFA','2026-09',True)
+        again=BookHistory(self.path)
+        with patch('book_history.Path.resolve',side_effect=AssertionError('network unavailable')):
+            again.prepare_root('Z:/Condos')
+            self.assertTrue(again.get('Z:/Condos','ALFA','2026-09')['complete'])
+
+    def test_missing_or_corrupt_primary_recovers_backup_and_preserves_bad_file(self):
+        h=self.history;h.complete(self.root,'ALFA','2026-09',True)
+        h.touch(self.root,'ALFA')  # Backup contém o livro concluído.
+        self.assertTrue(h.backup.exists())
+        self.path.unlink()
+        restored=BookHistory(self.path)
+        self.assertTrue(restored.get(self.root,'ALFA','2026-09')['complete'])
+        self.assertTrue(restored.recovery_notice)
+        self.path.write_text('{broken',encoding='utf-8')
+        restored=BookHistory(self.path)
+        self.assertTrue(restored.get(self.root,'ALFA','2026-09')['complete'])
+        self.assertEqual(next(self.path.parent.glob('livros.corrompido-*.json')).read_text(),'{broken')
+
+    def test_failed_replace_does_not_erase_disk_history_or_poison_next_save(self):
+        h=self.history;h.complete(self.root,'ALFA','2026-09',True)
+        before=self.path.read_bytes()
+        with patch('book_history.os.replace',side_effect=OSError('disk error')):
+            with self.assertRaises(OSError):h.complete(self.root,'BETA','2026-09',True)
+        self.assertEqual(self.path.read_bytes(),before)
+        h.touch(self.root,'ALFA')
+        self.assertFalse(h.get(self.root,'BETA','2026-09'))
+        self.assertTrue(h.get(self.root,'ALFA','2026-09')['complete'])
+
+    def test_explicit_restore_rebinds_only_chosen_month_and_merges_existing_work(self):
+        h=self.history;old=self.root/'old';new=self.root/'new'
+        h.updated(old,'ALFA','2026-09',[0]);h.print_event(old,'ALFA','2026-09','sent',self.row)
+        h.complete(old,'ALFA','2026-09',True)
+        h.complete(old,'BETA','2026-09',True);h.complete(old,'ALFA','2026-10',True)
+        h.updated(new,'ALFA','2026-09',[1])
+        option=next(o for o in h.recovery_options('2026-09') if o['path']==str(self.path) and o['root']==str(old.resolve()).casefold())
+        before=self.doc.read_bytes()
+        self.assertEqual(h.restore_month(option,new,'2026-09',['ALFA']),1)
+        book=h.get(new,'ALFA','2026-09')
+        self.assertEqual(book['updated'],[0,1]);self.assertTrue(book['complete']);self.assertEqual(len(book['sent']),1)
+        self.assertFalse(h.get(new,'BETA','2026-09'));self.assertFalse(h.get(new,'ALFA','2026-10'))
+        self.assertTrue(h.get(old,'ALFA','2026-09')['complete'])
+        self.assertEqual(before,self.doc.read_bytes())
+        self.assertEqual(h.restore_month(option,new,'2026-09',['ALFA']),1)
+        self.assertEqual(len(h.get(new,'ALFA','2026-09')['sent']),1)
+
+    def test_restore_from_backup_does_not_discard_new_current_records(self):
+        h=self.history;h.complete(self.root,'ALFA','2026-09',True)
+        h.complete(self.root,'BETA','2026-09',True)
+        option=next(o for o in h.recovery_options('2026-09') if o['path']==str(h.backup))
+        h.restore_month(option,self.root,'2026-09',['ALFA','BETA'])
+        self.assertTrue(h.get(self.root,'ALFA','2026-09')['complete'])
+        self.assertTrue(h.get(self.root,'BETA','2026-09')['complete'])
     def test_partial_print_records_success_and_uncertain_file_before_failure(self):
         second=self.doc.with_name('ANEXO.doc');second.write_bytes(b'annex')
         rows=[self.row,dict(self.row,key='closing2',path=second,hash=digest(second),label='Anexo')]
