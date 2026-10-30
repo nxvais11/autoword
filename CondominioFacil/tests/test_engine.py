@@ -31,9 +31,20 @@ class Dates(unittest.TestCase):
         text = apply_text('agosto / 2026', plan('agosto / 2026', 1, 9, 2027)[0])
         self.assertEqual(text, 'setembro / 2027')
 
-    def test_mismatched_references(self):
-        with self.assertRaises(ValueError):
-            plan(APPROVAL.replace('Pasta AGOSTO', 'Pasta JULHO'), 0, 11, 2026)
+    def test_mismatched_references_are_all_normalized(self):
+        original = APPROVAL.replace('Pasta AGOSTO/2026', 'Pasta JULHO/2025')
+        for month, year in ((8, 2026), (2, 2028), (1, 2027)):
+            with self.subTest(month=month, year=year):
+                changes, baseline = plan(original, 0, month, year)
+                expected = apply_text(APPROVAL, plan(APPROVAL, 0, month, year)[0])
+                self.assertEqual(apply_text(original, changes), expected)
+                self.assertIsNone(baseline)
+
+    def test_long_date_different_from_references_is_normalized(self):
+        original = APPROVAL.replace('31 de Agosto de 2026', '30 de Junho de 2025')
+        changes, baseline = plan(original, 0, 8, 2026)
+        self.assertEqual(apply_text(original, changes), APPROVAL)
+        self.assertIsNone(baseline)
 
     def test_wrong_count(self):
         for text in ('Sem data', 'AGOSTO/2026 AGOSTO/2026', '08/2026'):
@@ -130,8 +141,10 @@ class Batch(unittest.TestCase):
         self.assertFalse(list(Path(self.temp.name).resolve().rglob('.temporario_*')))
     def test_cross_document_mismatch(self):
         self.condos[0]['files'][2].write_text('SETEMBRO/2026', encoding='utf-8')
-        with self.assertRaises(ValueError):
-            inspect_condo(FakeWord(), self.condos[0], 11, 2026, [])
+        docs = inspect_condo(FakeWord(), self.condos[0], 11, 2026, [])
+        self.assertEqual(len(docs), 4)
+        for doc in docs:
+            self.assertIn('NOVEMBRO/2026', apply_text(doc['text'], doc['changes']))
     def test_ambiguous_file(self):
         (self.folder/(FILES[0]+'.docx')).write_text('duplicado')
         self.assertTrue(discover(self.root)[0]['errors'])

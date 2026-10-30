@@ -226,7 +226,7 @@ class Word:
             raise ValueError('O Word não produziu um documento válido para publicação.')
 
 def inspect_condo(word, condo, month, year, rules, kinds=(0,1,2,3), sheet_rows=None, sheet_mapping=None, models=None, resignations=(), check_resignations=True):
-    docs, baselines = [], set()
+    docs = []
     if not kinds:
         raise ValueError('Selecione pelo menos um documento.')
     active_events=[]
@@ -246,7 +246,7 @@ def inspect_condo(word, condo, month, year, rules, kinds=(0,1,2,3), sheet_rows=N
         else:
             saved = None
             text = word.read(path)
-        changes, baseline = plan(text, kind, month, year, [] if sheet_rows is not None else rules)
+        changes, _ = plan(text, kind, month, year, [] if sheet_rows is not None else rules)
         if sheet_rows is not None:
             changes += sheet_changes(text, sheet_rows, sheet_mapping or {}, legacy=kind==0)
         notices=[]
@@ -257,13 +257,10 @@ def inspect_condo(word, condo, month, year, rules, kinds=(0,1,2,3), sheet_rows=N
             raise ValueError('Campos de planilha e datas sobrepostos. Revise os marcadores no modelo.')
         if digest(path) != before:
             raise ValueError('Arquivo alterado durante a conferência. Tente novamente.')
-        baselines.add(baseline)
         docs.append({'path': path, 'hash': before, 'text': text, 'changes': changes, 'kind':kind,
                      'model_hash':saved['template_hash'] if saved else before,
                      'template':saved['data'] if saved else None,'notices':notices,
                      'resignation_events':list(resignations) if kind==0 else []})
-    if len(baselines) != 1:
-        raise ValueError('Os documentos selecionados estão em competências diferentes.')
     return docs
 
 def document_signature(doc):
