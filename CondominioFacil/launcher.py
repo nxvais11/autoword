@@ -134,20 +134,9 @@ def main():
         app=App()
         app.log(status)
         if getattr(sys,'frozen',False):
-            from executable_update import prepare_update
             from version import VERSION
-            def check():
-                try:
-                    receipt=prepare_update(DATA,config()['repository'],VERSION)
-                    if receipt:
-                        app.events.put(('installer_ready',receipt))
-                except Exception as exc:
-                    app.events.put(('log','Atualização indisponível: '+str(exc)))
-            threading.Thread(target=check,daemon=True).start()
+            app.start_update_monitor(config()['repository'],VERSION)
         app.mainloop()
-        if getattr(app,'pending_installer',None):
-            from executable_update import launch_update
-            launch_update(app.pending_installer,DATA,sys.executable)
     finally:
         win32api.CloseHandle(handle)
 

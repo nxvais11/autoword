@@ -18,8 +18,8 @@ class ConsoleMessages(unittest.TestCase):
         result=self.fixture();value=search_message(result,{0})
         self.assertIn('1/1 documentos localizados',value['summary'])
         self.assertNotIn('candidatos',value['summary'])
-        self.assertIn('PDF pessoal: 0 candidatos',value['details'])
-        self.assertIn('Word do Jurídico: 0 candidatos',value['details'])
+        self.assertIn('Relatório PDF de obrigações: não localizado',value['details'])
+        self.assertIn('Word do Jurídico (fonte da conferência): não localizado',value['details'])
         value=search_message(result,{0,1})
         self.assertIn('Vincule os arquivos ausentes',value['summary'])
         self.assertIn('Relatório de obrigações',value['summary'])
@@ -34,6 +34,17 @@ class ConsoleMessages(unittest.TestCase):
         self.assertIn('SERVIÇO 11',value['details'])
         self.assertIn('Extrato ambíguo',value['summary'])
         self.assertEqual(value,search_message(result,{0}))
+
+    def test_details_exclude_other_condos_and_repeated_network_paths(self):
+        result=self.fixture();result['name']='ATUAL'
+        result['warnings']+=['alheio.pdf: identificação ambígua entre OUTRO A, OUTRO B. Vincule o arquivo correto.']
+        result['rows'][0]['path']=r'\\server\condominios\ATUAL\CAPA LIVRO.doc'
+        text=search_message(result,{0})['details']
+        self.assertIn('Condomínio: ATUAL',text)
+        self.assertNotIn('OUTRO A',text);self.assertNotIn('OUTRO B',text)
+        self.assertNotIn('server',text);self.assertIn('CAPA LIVRO.doc',text)
+        result['warnings']+=['atual.pdf: identificação ambígua entre ATUAL, OUTRO. Vincule o arquivo correto.']
+        self.assertIn('atual.pdf',search_message(result,{0})['details'])
 
     def test_partial_send_never_says_completed_or_repeats_success_instructions(self):
         row=dict(key='closing1',hash='abc',label='Capa')

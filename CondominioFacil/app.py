@@ -53,6 +53,9 @@ class App(tk.Tk):
         self.last_jobs = {}
         self.generation_cache = {}
         self.state_dirty = False
+        self.update_service=None;self.update_offer=None;self.update_phase='idle'
+        self.pending_installer=None;self.update_handoff=False
+        self.update_timer=None;self.update_apply_timer=None
         if MAPPINGS.exists():
             try:
                 self.mappings = json.loads(MAPPINGS.read_text(encoding='utf-8'))
@@ -88,6 +91,13 @@ class App(tk.Tk):
         self.build_interface()
         self.signature=ttk.Label(self,text='98novais',style='Muted.TLabel',anchor='e',padding=(16,4))
         self.signature.pack(side='bottom',fill='x')
+        self.update_banner=ttk.Frame(self,padding=(16,6))
+        self.update_notice=tk.StringVar()
+        self.update_label=ttk.Label(self.update_banner,textvariable=self.update_notice,wraplength=760,style='Section.TLabel')
+        self.update_label.pack(side='left',fill='x',expand=True)
+        self.update_label.bind('<Button-1>',lambda event:self.apply_available_update())
+        self.update_apply_button=ttk.Button(self.update_banner,text='Atualizar e reiniciar',command=self.apply_available_update,style='Primary.TButton')
+        self.update_apply_button.pack(side='right',padx=(12,0))
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.after(100, self.poll)
         self.after(3000, self.watch_sheet)
@@ -461,10 +471,6 @@ class App(tk.Tk):
         ttk.Button(content,text='Editar responsáveis do selecionado…',command=lambda:action(self.edit_roster)).pack(fill='x',pady=5)
         ttk.Button(content,text='Importar planilha de responsáveis…',command=lambda:action(self.import_sheet)).pack(fill='x',pady=5)
         ttk.Button(content,text='Desvincular planilha',command=lambda:action(self.unlink_sheet)).pack(fill='x',pady=5)
-        def updates():
-            from launcher import configure_updates
-            configure_updates(self)
-        ttk.Button(content,text='Atualizações do aplicativo…',command=lambda:action(updates)).pack(fill='x',pady=5)
         ttk.Label(content,textvariable=self.sheet_status,wraplength=570).pack(anchor='w',pady=8)
         ttk.Label(content, text='Atalhos: Ctrl+O · abrir pasta    Ctrl+Enter · atualizar    F1 · opções',
                   style='Muted.TLabel').pack(anchor='w', pady=(4, 12))
@@ -535,8 +541,11 @@ class App(tk.Tk):
                     self.toggle_details(True)
                 elif kind == 'installer_ready':
                     self.pending_installer = value
-                    messages.append('Nova versão pronta. Feche o AutoWord para instalar e reabrir automaticamente.')
-                    self.status.set('Atualização pronta: será instalada ao fechar o aplicativo.')
+                    self.update_phase='ready'
+                    self.show_update_notice('Atualização '+value['version']+' validada. Preparando o reinício seguro…')
+                    self.finish_update()
+                elif kind.startswith('update_'):
+                    self.update_event(kind,value)
                 elif kind == 'print_ready':
                     self.print_job = value
                 elif kind == 'printed':
@@ -1158,11 +1167,94 @@ class App(tk.Tk):
             panel=getattr(self,'central_panel',None)
             if panel is not None:panel.status.set(self.status.get())
         else:
+            if self.pending_installer is not None:
+                self.finish_update();return
             panel=getattr(self,'central_panel',None)
             if panel is not None:panel.catalog_cancel.set()
             if self.state_dirty:
                 self.save_runtime_state()
             self.destroy()
+
+    def start_update_monitor(self,repository,current,interval_ms=None):
+        if self.update_service is not None:return
+        from update_service import UpdateService,CHECK_INTERVAL_MS
+        from executable_update import consume_install_error
+        self.update_interval=interval_ms or CHECK_INTERVAL_MS
+        self.update_service=UpdateService(DATA,repository,current,self.events.put)
+        error=consume_install_error(DATA)
+        if error:self.events.put(('update_install_error',error))
+        self.update_timer=self.after(1000,self.update_tick)
+
+    def update_tick(self):
+        self.update_timer=None
+        if self.update_service is None:return
+        self.update_service.check()
+        self.update_timer=self.after(self.update_interval,self.update_tick)
+
+    def show_update_notice(self,text,action=False):
+        self.update_notice.set(text)
+        self.update_apply_button.configure(state='normal' if action else 'disabled')
+        self.update_label.configure(cursor='hand2' if action else '')
+        if not self.update_banner.winfo_manager():self.update_banner.pack(side='top',fill='x',before=self.signature)
+
+    def update_event(self,kind,value):
+        if kind=='update_available':
+            if self.update_phase in ('downloading','ready','installing'):return
+            self.update_offer=value;self.update_phase='available'
+            self.show_update_notice('AutoWord '+value['version']+' disponível. Clique para baixar, instalar e reiniciar.',True)
+        elif kind=='update_current':
+            if self.update_phase not in ('downloading','ready','installing'):
+                self.update_offer=None;self.update_phase='idle';self.update_banner.pack_forget()
+        elif kind=='update_downloading':
+            self.update_phase='downloading'
+            self.show_update_notice('Baixando AutoWord '+value+' e conferindo a integridade. Você pode continuar usando o aplicativo.')
+        elif kind=='update_check_error':
+            if self.update_phase in ('downloading','ready','installing'):return
+            self.show_update_notice('Não foi possível verificar atualizações. Uma nova tentativa será feita automaticamente.',self.update_offer is not None)
+            self.log('Atualizações: '+value)
+        elif kind in ('update_download_error','update_install_error'):
+            self.update_phase='error'
+            self.show_update_notice('A atualização não foi aplicada. '+value+(' Clique no aviso para tentar novamente.' if self.update_offer else ''),self.update_offer is not None)
+            messagebox.showerror('Atualização não aplicada',value,parent=self)
+
+    def apply_available_update(self):
+        if self.update_service is None or self.update_phase not in ('available','error'):return
+        if self.update_service.download():
+            self.update_phase='downloading'
+            self.show_update_notice('Baixando a atualização e conferindo a integridade…')
+
+    def finish_update(self):
+        if self.update_apply_timer:
+            try:self.after_cancel(self.update_apply_timer)
+            except tk.TclError:pass
+        self.update_apply_timer=None
+        if self.pending_installer is None or self.update_handoff:return
+        if self.busy or self.sheet_polling or self.tk.call('grab','current',self._w):
+            self.show_update_notice('Atualização pronta. A instalação aguardará a operação ou janela atual terminar.')
+            self.update_apply_timer=self.after(500,self.finish_update);return
+        try:
+            if self.state_dirty:
+                self.save_runtime_state()
+                if self.state_dirty:raise RuntimeError('Não foi possível salvar a sessão. O aplicativo continuará aberto.')
+            from executable_update import launch_update
+            import sys
+            launch_update(self.pending_installer,DATA,sys.executable)
+        except Exception as exc:
+            self.pending_installer=None
+            if self.update_service is not None:self.update_service.retry_install()
+            self.update_event('update_install_error',str(exc));return
+        self.update_handoff=True;self.destroy()
+
+    def destroy(self):
+        service=getattr(self,'update_service',None)
+        if service is not None:service.stop()
+        for name in ('update_timer','update_apply_timer'):
+            callback=getattr(self,name,None)
+            if callback:
+                try:self.after_cancel(callback)
+                except tk.TclError:pass
+                setattr(self,name,None)
+        super().destroy()
 
 if __name__ == '__main__':
     try:

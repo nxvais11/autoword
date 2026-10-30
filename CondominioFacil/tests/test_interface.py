@@ -320,7 +320,7 @@ class Interface(unittest.TestCase):
                     yield child
                     yield from walk(child)
             text=next(w for w in walk(dialog) if isinstance(w,tk.Text))
-            self.assertIn('PDF pessoal: 0 candidatos',text.get('1.0','end'))
+            self.assertIn('Relatório PDF de obrigações: não localizado',text.get('1.0','end'))
             self.assertEqual(str(text.cget('state')),'disabled')
             dialog.destroy()
             panel.month.set('Dezembro')
@@ -421,6 +421,75 @@ class Interface(unittest.TestCase):
             self.wait_central(panel)
             error.assert_not_called()
 
+    def test_refresh_list_is_in_alias_editor_and_preserves_unsaved_names(self):
+        from central_ui import settings_dialog
+        from engine import FILES
+        from tkinter import ttk
+        panel,folder=self.workspace_fixture()
+        def walk(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from walk(child)
+        self.assertFalse(any(isinstance(w,ttk.Button) and w.cget('text')=='Atualizar lista' for w in walk(panel)))
+        dialog=settings_dialog(panel,panel.path)
+        self.assertIs(dialog.refresh_button.master,dialog.alias_combo.master)
+        self.assertFalse(any(isinstance(w,ttk.Button) and w.cget('text')=='Atualizações do aplicativo…' for w in walk(dialog)))
+        before=panel.path.read_bytes()
+        dialog.alias_text.insert('1.0','NOME AINDA NÃO SALVO')
+        added=Path(panel.settings['root'])/'NOVO'/'FECHAMENTO DE LIVRO';added.mkdir(parents=True)
+        for name in FILES:(added/(name+'.doc')).write_text('AGOSTO/2026')
+        with patch('central_ui.messagebox.showerror') as error:
+            dialog.refresh_button.invoke();self.wait_central(panel);error.assert_not_called()
+        self.assertTrue(dialog.winfo_exists())
+        self.assertIn('NOVO',dialog.alias_combo.cget('values'))
+        self.assertIn('NOME AINDA NÃO SALVO',dialog.alias_text.get('1.0','end'))
+        self.assertEqual(panel.path.read_bytes(),before);dialog.destroy()
+        options=self.app.options_dialog()
+        self.assertFalse(any(isinstance(w,ttk.Button) and w.cget('text')=='Atualizações do aplicativo…' for w in walk(options)))
+        options.destroy();self.assertTrue(panel.update_print_button.winfo_exists())
+
+    def test_update_banner_remains_visible_and_click_downloads_once_then_waits_for_documents(self):
+        from unittest.mock import Mock
+        panel,folder=self.workspace_fixture()
+        self.app.update_service=Mock();self.app.update_service.download.return_value=True
+        offer=dict(version='v0.12.99',asset_id=1,sha256='a'*64)
+        self.app.update_event('update_available',offer);self.app.update()
+        self.assertTrue(self.app.update_banner.winfo_ismapped())
+        self.app.show_batch();self.app.update();self.assertTrue(self.app.update_banner.winfo_ismapped())
+        self.app.open_central();self.app.update();self.assertTrue(self.app.update_banner.winfo_ismapped())
+        self.app.update_apply_button.invoke();self.app.apply_available_update()
+        self.app.update_service.download.assert_called_once()
+        self.app.busy=True;receipt=dict(path='installer.exe',version='v0.12.99',sha256='a'*64)
+        with patch('executable_update.launch_update') as launch,patch.object(self.app,'destroy') as close:
+            self.app.events.put(('installer_ready',receipt));self.app.poll()
+            launch.assert_not_called();close.assert_not_called();self.assertFalse(self.app.cancel.is_set())
+            self.app.busy=False;self.app.finish_update()
+            launch.assert_called_once();close.assert_called_once()
+
+    def test_update_failures_leave_app_open_and_allow_retry_from_notice(self):
+        from unittest.mock import Mock
+        self.app.update_service=Mock();self.app.update_offer=dict(version='v0.12.99')
+        with patch('app.messagebox.showerror') as error,patch.object(self.app,'destroy') as close,patch('executable_update.launch_update',side_effect=ValueError('SHA-256 alterado')) as launch:
+            self.app.pending_installer=dict(path='invalid.exe',version='v0.12.99',sha256='a'*64)
+            self.app.finish_update()
+            close.assert_not_called();error.assert_called_once();launch.assert_called_once()
+        self.assertIsNone(self.app.pending_installer);self.assertEqual(self.app.update_phase,'error')
+        self.app.update_service.retry_install.assert_called_once()
+        self.assertEqual(str(self.app.update_apply_button.cget('state')),'normal')
+        self.app.apply_available_update();self.app.update_service.download.assert_called_once()
+
+    def test_update_checks_repeat_automatically_without_blocking_interface(self):
+        import time
+        with patch('update_service.UpdateService') as service,patch('executable_update.consume_install_error',return_value=''):
+            self.app.start_update_monitor('nxvais11/autoword','0.12.0',interval_ms=20)
+            self.app.after_cancel(self.app.update_timer);self.app.update_timer=None;self.app.update_tick()
+            deadline=time.monotonic()+1
+            while service.return_value.check.call_count<2 and time.monotonic()<deadline:
+                self.app.update();time.sleep(.005)
+            self.assertGreaterEqual(service.return_value.check.call_count,2)
+            self.assertFalse(self.app.busy)
+            service.return_value.download.assert_not_called()
+
     def test_return_to_central_reuses_loaded_catalog_and_document_selection(self):
         with patch('central_ui.check_obligations',side_effect=lambda result,*args:result):
             panel,folder=self.workspace_fixture()
@@ -484,7 +553,7 @@ class Interface(unittest.TestCase):
             warning.assert_called_once()
             self.assertIn('esperada em 09/2027',warning.call_args.args[1])
         self.assertTrue(all(i not in panel.checked for i,row in enumerate(result['rows']) if row['group']=='obligations'))
-        self.assertIn('Inconsistências/dados a corrigir',panel.details.get('1.0','end'))
+        self.assertIn('1 inconsistência(s) ou dado(s) a corrigir',panel.details.get('1.0','end'))
 
     def test_warm_start_uses_cache_while_network_scan_runs_and_can_close(self):
         import threading

@@ -101,6 +101,18 @@ class Central(unittest.TestCase):
         self.assertIsNone(self.lookup()['word'])
         self.cfg['overrides']={'ALFA':{'report_word':str(extra)}}
         self.assertEqual(self.lookup()['word'],extra)
+
+    def test_statement_ambiguity_only_warns_the_condo_involved(self):
+        self.cfg['statement_aliases']={'ALFA':['MESMO NOME'],'ALFA JARDIM':['MESMO NOME']}
+        pdf(self.month/'MESMO NOME.pdf','CONDOMINIO ALFA')
+        self.assertTrue(any('ambíguo' in warning for warning in self.lookup()['warnings']))
+        self.assertFalse(any('ALFA JARDIM' in warning for warning in self.lookup()['warnings']))
+        third=Path(self.cfg['root'])/'BETA';third.mkdir();(third/'CAPA.doc').write_text('modelo')
+        result=search(self.cfg,'BETA',9,2026)
+        self.assertFalse(any('MESMO NOME' in warning or 'ambíguo' in warning for warning in result['warnings']))
+        pdf(self.month/'SEM DONO.pdf','')
+        result=search(self.cfg,'BETA',9,2026)
+        self.assertFalse(any('SEM DONO' in warning for warning in result['warnings']))
     def test_manual_statement_bindings_do_not_leak_to_other_months(self):
         chosen=self.month/'manual.pdf';pdf(chosen)
         self.cfg['overrides']={'ALFA':{'statements:2026-09':[str(chosen)]}}

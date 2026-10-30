@@ -224,7 +224,12 @@ a impressão física depende do Word, da impressora e de seus drivers.
 
 O repositório configurado é `nxvais11/autoword`, criado como público. Apenas código, testes sintéticos e instruções são publicados. Documentos, PDFs de exemplo, cadastros e credenciais ficam fora do Git e das Releases. Por ser público, a atualização não precisa de senha ou token no computador.
 
-Após receber esta versão uma vez, continue abrindo por **INICIAR.vbs**. O iniciador consulta Releases estáveis, com cache de seis horas, verifica o SHA-256 fornecido pelo GitHub e a versão interna e substitui apenas o código antes da abertura do programa. Para forçar uma nova consulta na próxima abertura, use **Opções → Atualizações do aplicativo**. Não há CMD permanente.
+Instalações antigas por código continuam abrindo por **INICIAR.vbs**, com consulta
+de Releases estáveis na abertura e validação SHA-256. Não há CMD permanente.
+Na instalação por AutoWord-Setup.exe, a consulta ocorre ao abrir e a cada 30 minutos.
+Uma versão nova aparece em um aviso na página principal. Clique para baixar,
+validar, instalar e reiniciar; operações com documentos terminam com segurança
+antes da instalação. Os antigos botões de atualização manual foram removidos.
 
 Em erro de conexão, a versão instalada continua disponível. Em falha de instalação, o código anterior é restaurado. Cadastros, modelos internos e documentos dos condomínios não são substituídos pelo atualizador. O estado da consulta fica em `%LOCALAPPDATA%\CondominioFacil\atualizacao.json`; nenhum token é necessário para este repositório público.
 

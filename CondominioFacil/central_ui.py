@@ -72,6 +72,39 @@ def settings_dialog(parent,path,on_saved=None):
         alias_text.configure(state='disabled')
         ttk.Label(aliases_tab,text='Carregue os condomínios na Central para cadastrar os nomes.').pack(anchor='w')
     dialog.alias_combo=alias_combo;dialog.alias_text=alias_text
+    refresh_target=[parent if hasattr(parent,'reload') else getattr(owner,'central_panel',None)]
+    def refresh_choices(error=''):
+        if not dialog.winfo_exists():return
+        refresh_button.configure(state='normal',text='Atualizar lista')
+        if error:
+            messagebox.showerror('Lista não atualizada',error,parent=dialog);return
+        target=refresh_target[0]
+        store_aliases()
+        alias_names[:]=alphabetical_names(set(target.catalog_names)|set(aliases))
+        alias_combo.configure(values=alias_names)
+        alias_text.configure(state='normal' if alias_names else 'disabled')
+        if alias_name.get() not in alias_names:
+            alias_name.set(alias_names[0] if alias_names else '');change_aliases()
+    def register_refresh(target):
+        refresh_target[0]=target;target.catalog_dialog=dialog;target.catalog_dialog_refresh=refresh_choices
+    def refresh_catalog():
+        target=refresh_target[0]
+        if target is None:
+            owner.open_central();target=getattr(owner,'central_panel',None)
+        if target is None:return
+        register_refresh(target)
+        refresh_button.configure(state='disabled',text='Atualizando…');target.reload()
+    refresh_button=ttk.Button(aliases_tab,text='Atualizar lista',command=refresh_catalog)
+    refresh_button.pack(anchor='w',pady=(8,0))
+    ttk.Label(aliases_tab,text='Busca novamente os condomínios nas pastas. Não altera os nomes digitados.',style='Muted.TLabel',wraplength=650).pack(anchor='w',pady=4)
+    if refresh_target[0] is not None:register_refresh(refresh_target[0])
+    def release_refresh(event):
+        if event.widget is not dialog:return
+        target=refresh_target[0]
+        if target is not None and getattr(target,'catalog_dialog',None) is dialog:
+            target.catalog_dialog=None;target.catalog_dialog_refresh=None
+    dialog.bind('<Destroy>',release_refresh,add='+')
+    dialog.refresh_button=refresh_button
     values={}
     for field,label in [('root','Pasta principal dos condomínios'),('statements','Extratos (pasta acima dos anos)'),('reports','PDFs pessoais de obrigações'),('destination','Salvar Words em (vazio: pasta original)')]:
         host=update if field=='destination' else paths
@@ -122,10 +155,6 @@ def settings_dialog(parent,path,on_saved=None):
     ttk.Button(actions,text='Importar planilha de responsáveis…',command=lambda:call(owner.import_sheet)).pack(anchor='w',pady=4)
     ttk.Button(actions,text='Desvincular planilha',command=lambda:call(owner.unlink_sheet)).pack(anchor='w',pady=4)
     ttk.Label(update,textvariable=owner.sheet_status,wraplength=650).pack(anchor='w')
-    def updates():
-        from launcher import configure_updates
-        configure_updates(owner)
-    ttk.Button(update,text='Atualizações do aplicativo…',command=lambda:call(updates)).pack(anchor='w',pady=10)
     def save():
         try:
             store_aliases();validate_statement_aliases(aliases,alias_names)
@@ -166,7 +195,6 @@ class CentralView:
         header=ttk.Frame(body);header.grid(row=0,column=0,sticky='ew',pady=(0,10))
         ttk.Label(header,text='AutoWord',style='Title.TLabel').pack(side='left')
         self.action(header,'Opções',self.configure_paths).pack(side='right')
-        self.action(header,'Atualizar lista',self.reload).pack(side='right',padx=8)
         self.action(header,'Controle mensal',self.monthly_control).pack(side='right',padx=8)
         self.action(header,'Atualização em lote',self.open_batch).pack(side='right',padx=8)
         row=ttk.Frame(body);row.grid(row=1,column=0,sticky='ew')
@@ -378,7 +406,7 @@ class CentralView:
                     cancel,result,error=value
                     if cancel is not self.catalog_cancel or cancel.is_set():continue
                     grab=str(self.tk.call('grab','current',self._w))
-                    if self.busy or self.parent.busy or (grab and grab!=str(self)):
+                    if self.busy or self.parent.busy or (grab and grab not in (str(self),str(getattr(self,'catalog_dialog',None)))):
                         self.events.put((kind,value));break
                     self.catalog_loading=False
                     if error:
@@ -391,6 +419,8 @@ class CentralView:
                         if not self.result:self.status.set('Selecione condomínio e competência para atualizar ou imprimir.')
                         if getattr(self,'query_after_reload',False) and self.name.get():
                             self.query_after_reload=False;self.after_idle(self.query)
+                    refresh=getattr(self,'catalog_dialog_refresh',None)
+                    if refresh:refresh(error)
                 elif kind=='workspace':
                     self.parent.apply_discovered(value['root'],value['condos'])
                     self.set_names(value['names'])
@@ -490,7 +520,7 @@ class CentralView:
         self.details.configure(state='normal');self.details.delete('1.0','end');self.details.insert('end',text);self.details.configure(state='disabled')
 
     def open_details(self):
-        dialog=tk.Toplevel(self);dialog.title('Detalhes da consulta ou operação');dialog.transient(self.winfo_toplevel());dialog.geometry('850x500')
+        dialog=tk.Toplevel(self);dialog.title('Detalhes — '+self.result['name'] if self.result else 'Detalhes da operação');dialog.transient(self.winfo_toplevel());dialog.geometry('850x500')
         host=ttk.Frame(dialog,padding=12);host.pack(fill='both',expand=True)
         text=tk.Text(host,wrap='word',font=('Segoe UI',10));text.pack(side='left',fill='both',expand=True)
         scroll=ttk.Scrollbar(host,command=text.yview);scroll.pack(side='right',fill='y');text.configure(yscrollcommand=scroll.set)
