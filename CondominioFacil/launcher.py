@@ -132,6 +132,7 @@ def main():
             status='Atualizações indisponíveis; mantida a versão instalada.'
         from app import App
         app=App()
+        if app.closed:return
         app.log(status)
         if getattr(sys,'frozen',False):
             from version import VERSION

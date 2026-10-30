@@ -25,6 +25,7 @@ class App(tk.Tk):
     def __init__(self,start_central=True):
         started=time.perf_counter()
         super().__init__()
+        self.closed = False
         self.style = apply_theme(self)
         icon = Path(__file__).with_name('autoword.ico')
         if icon.exists():
@@ -260,7 +261,7 @@ class App(tk.Tk):
         self.log_many([text])
 
     def log_many(self, messages):
-        if not messages:
+        if self.closed or not messages:
             return
         text = '\n'.join(messages)+'\n'
         if re.search(r'\b(ERRO|REVISAR|FALHOU)\b', text, re.IGNORECASE):
@@ -271,6 +272,7 @@ class App(tk.Tk):
         self.logbox.configure(state='disabled')
 
     def report_callback_exception(self, exception_type, value, traceback):
+        if self.closed:return
         self.log('ERRO: '+str(value))
         messagebox.showerror('Não foi possível concluir',str(value),parent=self)
 
@@ -520,10 +522,12 @@ class App(tk.Tk):
         threading.Thread(target=worker, daemon=False).start()
 
     def poll(self):
+        if self.closed:return
         messages = []
         deadline = time.perf_counter()+0.008
         try:
             for _ in range(80):
+                if self.closed:return
                 if time.perf_counter() >= deadline:
                     break
                 kind, value = self.events.get_nowait()
@@ -636,6 +640,7 @@ class App(tk.Tk):
                     if getattr(self,'close_pending',False):self.after_idle(self.close)
         except queue.Empty:
             pass
+        if self.closed:return
         self.log_many(messages)
         if self.winfo_exists():
             self.after(10 if not self.events.empty() else 100, self.poll)
@@ -1246,6 +1251,8 @@ class App(tk.Tk):
         self.update_handoff=True;self.destroy()
 
     def destroy(self):
+        if self.closed:return
+        self.closed=True
         service=getattr(self,'update_service',None)
         if service is not None:service.stop()
         for name in ('update_timer','update_apply_timer'):

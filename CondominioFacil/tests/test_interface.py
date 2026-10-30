@@ -36,7 +36,7 @@ class Interface(unittest.TestCase):
 
     def tearDown(self):
         panel=getattr(self.app,'central_panel',None)
-        if panel is not None and panel.winfo_exists():panel.destroy()
+        if not self.app.closed and panel is not None and panel.winfo_exists():panel.destroy()
         # Cancela callbacks para não deixar trabalho pendente entre janelas.
         for callback in self.app.tk.splitlist(self.app.tk.call('after', 'info')):
             self.app.after_cancel(callback)
@@ -44,6 +44,23 @@ class Interface(unittest.TestCase):
         for item in reversed(self.patches):
             item.stop()
         self.tmp.cleanup()
+
+    def test_update_handoff_stops_event_poll_before_touching_destroyed_widgets(self):
+        receipt=dict(version='0.12.99',path='setup.exe',sha256='abc')
+        self.app.events.put(('log','REVISAR mensagem anterior ao reinício'))
+        self.app.events.put(('installer_ready',receipt))
+        self.app.events.put(('progress','não processar após fechar'))
+        with patch('executable_update.launch_update') as launch, patch.object(self.app,'log_many') as log:
+            self.app.poll()
+            launch.assert_called_once()
+            log.assert_not_called()
+        self.assertTrue(self.app.closed)
+        self.assertEqual(self.app.events.qsize(),1)
+        # Chamadas tardias e encerramento repetido não acessam comandos Tcl removidos.
+        self.app.poll()
+        self.app.log('ERRO: mensagem tardia')
+        self.app.report_callback_exception(tk.TclError,tk.TclError('janela fechada'),None)
+        self.app.destroy()
 
     def test_details_open_for_preview_and_errors_but_not_routine_logs(self):
         self.app.log('Condomínio exemplo: pronto para atualizar')
