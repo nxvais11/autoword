@@ -36,8 +36,8 @@ def plan(text, kind, month, year, rules=()):
                          f'{len(dates)} datas por extenso (esperado {1 if kind == 0 else 0}). Revisar arquivo.')
     baselines = {(normalize(m[1]), int(m[3])) for m in refs}
     baselines.update((normalize(m[3]), int(m[5])) for m in dates)
-    if len(baselines) != 1:
-        raise ValueError('As referências de mês/ano divergem dentro do documento. Revisar arquivo.')
+    # A atualização normaliza todas as referências reconhecidas para o destino,
+    # mesmo quando a origem contém competências diferentes.
     changes = []
     for m in refs:
         changes.append(Change(m.start(), m.end(), m[0],
@@ -77,7 +77,7 @@ def plan(text, kind, month, year, rules=()):
     for a, b in zip(changes, changes[1:]):
         if a.end > b.start:
             raise ValueError('Há alterações sobrepostas. Confira o cadastro de responsáveis.')
-    return changes, next(iter(baselines))
+    return changes, next(iter(baselines)) if len(baselines) == 1 else None
 
 def apply_text(text, changes):
     for c in reversed(changes):

@@ -45,6 +45,25 @@ class CentralUpdate(unittest.TestCase):
         self.assertEqual(count,5);self.assertEqual(updated['output'],str(self.folder))
         self.assertEqual((self.folder/'outro.doc').read_bytes(),b'untouched')
         self.assertEqual(len(list(self.root.rglob('*.doc'))),5)
+    def test_mixed_periods_are_normalized_before_printing(self):
+        approval=self.folder/(FILES[0]+'.doc')
+        approval.write_text(APPROVAL.replace('Pasta AGOSTO/2026','Pasta JULHO/2025')
+                            .replace('31 de Agosto de 2026','30 de Junho de 2025'),encoding='utf-8')
+        (self.folder/(FILES[2]+'.doc')).write_text('DEZEMBRO/2027',encoding='utf-8')
+        self.result=search(self.settings,'TESTE',11,2026)
+        rows=selected_plan(self.result,{0,1,2,3})
+        def send(plan,*args):
+            from document_period import periods
+            for row in plan:
+                self.assertEqual(periods(Path(row['path']).read_text()),[('novembro',2026)])
+            self.assertIn('30 de Novembro de 2026',approval.read_text())
+            return len(plan)
+        self.printer.side_effect=send
+        _,count=self.run_update(print_rows=rows)
+        self.assertEqual(count,4)
+        self.printer.assert_called_once()
+        self.assertEqual((self.folder/'outro.doc').read_bytes(),b'untouched')
+
     def test_only_update_needs_no_printer_or_statement_and_preserves_other_files(self):
         self.settings['main_printer']=''
         self.result['rows'][4]['path']=None
