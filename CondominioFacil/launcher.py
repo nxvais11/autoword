@@ -74,6 +74,8 @@ def configure_updates(parent):
 def smoke_test():
     # Executado no CI sem Word, rede ou acesso aos cadastros do usuário.
     import tempfile
+    from query_service import run_isolated,smoke_query
+    assert run_isolated(smoke_query,total_timeout=20)=='ok'
     import win32timezone
     import win32file
     # O Win32 carrega este módulo dinamicamente ao devolver datas de trabalhos da fila.
@@ -142,6 +144,8 @@ def main():
         win32api.CloseHandle(handle)
 
 if __name__=='__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
     if '--smoke-test' in sys.argv:
         try:
             result=smoke_test()
@@ -156,3 +160,4 @@ if __name__=='__main__':
     except Exception as exc:
         from tkinter import messagebox
         messagebox.showerror('Erro ao abrir Condomínio Fácil',str(exc))
+

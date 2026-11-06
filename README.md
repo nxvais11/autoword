@@ -233,3 +233,21 @@ Nomes iguais para condomínios diferentes são recusados ao salvar. Se o arquivo
 contiver nomes de mais de um condomínio, ele fica pendente com um aviso, sem
 escolha automática. Vincular arquivo continua disponível para exceções individuais
 na competência escolhida.
+
+
+## Consulta que não responde
+
+A busca ao selecionar um condomínio roda em um processo de leitura separado.
+O rodapé informa a etapa e o arquivo em processamento. Cancelar interrompe esse
+processo mesmo quando uma chamada nativa ao Word, leitor PDF ou rede não retorna.
+Há um limite de 45 segundos sem avanço de etapa e de 180 segundos no total.
+Quando já existe uma lista de arquivos, ela é preservada com aviso de consulta
+incompleta; os resultados não conferidos não são apresentados como verificados.
+É possível consultar outro condomínio após a interrupção.
+
+A consulta não salva documentos nem envia impressão. Em caso de interrupção,
+o aplicativo pode encerrar apenas a instância exclusiva do Word identificada por
+essa consulta, usando um handle de processo; não procura nem encerra o Word do
+usuário. Uma falha anterior à identificação da instância é informada sem encerrar
+processos de Word desconhecidos. O executável instalado testa a criação do
+processo de consulta antes da publicação.

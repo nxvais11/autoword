@@ -121,7 +121,7 @@ def due_rows(tables,month,year):
     return result['due'],result['issues']
 
 
-def read_tables(path):
+def read_tables(path,word_factory=None):
     if Path(path).suffix.lower()=='.docx':
         with ZipFile(path) as archive:
             root=ET.fromstring(archive.read('word/document.xml'))
@@ -129,7 +129,7 @@ def read_tables(path):
         return [[[''.join(t.text or '' for t in cell.findall('.//w:t',ns))
                   for cell in row.findall('w:tc',ns)] for row in table.findall('w:tr',ns)]
                 for table in root.findall('.//w:tbl',ns)]
-    with Word() as service:
+    with (word_factory or Word)() as service:
         doc=service.open(path,read_only=True)
         try:
             tables=[]
@@ -142,7 +142,7 @@ def read_tables(path):
         finally:doc.Close(0)
 
 
-def check_obligations(result,month,year):
+def check_obligations(result,month,year,word_factory=None,progress=None):
     """Cruza as colunas do Word original, sem editar o relatório."""
     old=set(result.get('obligation_issues',[]))|{result.get('due_notice','')}
     result['warnings']=[w for w in result.get('warnings',[]) if w not in old]
@@ -150,8 +150,10 @@ def check_obligations(result,month,year):
     if not path:issues=['Word original não localizado; conferência das obrigações não realizada.']
     else:
         try:
+            if progress:progress('Conferindo obrigações: '+str(path))
             before=digest(Path(path))
-            analysis=analyze_rows(read_tables(path),month,year)
+            tables=read_tables(path,word_factory=word_factory) if word_factory is not None else read_tables(path)
+            analysis=analyze_rows(tables,month,year)
             due,issues,checks=analysis['due'],analysis['issues'],analysis['checks']
             if digest(Path(path))!=before:
                 due=[];checks=[];issues=['Word mudou durante a leitura. Consulte novamente.']
@@ -167,3 +169,4 @@ def check_obligations(result,month,year):
     if result['due_notice']:result['warnings'].insert(0,result['due_notice'])
     result['warnings'].extend(issues)
     return result
+

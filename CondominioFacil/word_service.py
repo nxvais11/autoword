@@ -127,6 +127,9 @@ def discover(root, mappings=None, progress=None):
     return result
 
 class Word:
+    def __init__(self,on_created=None):
+        self.on_created=on_created
+
     def __enter__(self):
         import pythoncom
         import win32com.client
@@ -135,6 +138,7 @@ class Word:
         self.old_update_links = None
         try:
             self.app = win32com.client.DispatchEx('Word.Application')
+            if self.on_created:self.on_created(self.app)
             self.app.Visible = False
             self.app.ScreenUpdating = False
             self.app.DisplayAlerts = 0
@@ -395,3 +399,4 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
     if targets:
         return Path(next(iter(targets.values())))
     return output
+
