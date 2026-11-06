@@ -5,8 +5,9 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from query_service import run_isolated,QueryInterrupted,smoke_query,consult
+from query_service import run_isolated,QueryInterrupted,smoke_query,consult,_finish_process,_close_exited
 
 
 def blocked(send,path,partial=False):
@@ -69,3 +70,25 @@ class IsolatedQuery(unittest.TestCase):
             self.assertEqual([e['periods'] for e in result['document_periods']],[[('setembro',2026)]]*4)
             self.assertTrue(cache);self.assertTrue(progress)
             self.assertEqual(files,{p:p.read_bytes() for p in closing.iterdir()})
+
+    def test_delayed_process_exit_is_reaped_without_closing_a_running_process(self):
+        process=Mock(pid=123,exitcode=None)
+        process.is_alive.return_value=True
+        handle=Mock()
+        with patch('query_service._stop_word') as stop,patch('query_service.threading.Thread') as thread:
+            _finish_process(process,[handle])
+        stop.assert_called_once_with(handle);handle.Close.assert_called_once()
+        process.terminate.assert_called_once();process.kill.assert_called_once()
+        process.close.assert_not_called()
+        self.assertTrue(thread.call_args.kwargs['daemon'])
+        thread.return_value.start.assert_called_once()
+        process.exitcode=0
+        self.assertTrue(_close_exited(process));process.close.assert_called_once()
+
+    def test_native_exit_signal_race_does_not_replace_the_query_result(self):
+        process=Mock(pid=123,exitcode=0)
+        process.is_alive.return_value=False
+        process.close.side_effect=ValueError('Cannot close a process while it is still running')
+        with patch('query_service.threading.Thread') as thread:
+            _finish_process(process,[])
+        thread.return_value.start.assert_called_once()

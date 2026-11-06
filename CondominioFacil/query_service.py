@@ -2,6 +2,7 @@
 import copy
 import multiprocessing as mp
 import sys
+import threading
 import time
 
 
@@ -28,6 +29,38 @@ def _stop_word(handle):
     if handle is None:return
     import win32api,win32event
     if win32event.WaitForSingleObject(handle,0)==258:win32api.TerminateProcess(handle,1)
+
+
+def _close_exited(process):
+    if process.exitcode is None:return False
+    try:process.close()
+    except ValueError:return False  # O sinal de saída do Windows pode chegar depois.
+    return True
+
+
+def _reap(process):
+    # A espera pelo sinal nativo nunca retém a tarefa da interface.
+    process.join()
+    _close_exited(process)
+
+
+def _finish_process(process,handles):
+    # Encerra primeiro a instância exclusiva do Word: uma chamada COM presa
+    # pode atrasar a saída do leitor no Windows.
+    for handle in handles:
+        try:_stop_word(handle)
+        except Exception:pass
+        finally:
+            try:handle.Close()
+            except Exception:pass
+    if process.pid is None:return
+    try:
+        process.join(.1)
+        if process.is_alive():process.terminate();process.join(.2)
+        if process.is_alive():process.kill();process.join(.2)
+    except (OSError,ValueError):pass
+    if not _close_exited(process):
+        threading.Thread(target=_reap,args=(process,),daemon=True).start()
 
 
 def run_isolated(target,args=(),cancel=None,progress=None,*,timeout=45,total_timeout=180):
@@ -58,18 +91,9 @@ def run_isolated(target,args=(),cancel=None,progress=None,*,timeout=45,total_tim
                 elif kind=='error':raise QueryInterrupted('Não foi possível concluir a consulta: '+value+'\nÚltima etapa: '+stage)
             elif not process.is_alive():raise QueryInterrupted('A consulta foi encerrada antes de concluir. Última etapa: '+stage)
     finally:
-        # Nenhuma espera por COM; o processo de leitura pode ser terminado mesmo
-        # se uma chamada ao Word, PDF ou disco remoto não estiver retornando.
-        if process.pid is not None:
-            if process.is_alive():process.terminate()
-            process.join(1)
-            if process.is_alive():process.kill();process.join(1)
-            process.close()
-        for handle in handles:
-            try:_stop_word(handle)
-            except Exception:pass
-            finally:handle.Close()
-        sender.close();receiver.close()
+        # A limpeza não pode substituir o resultado/aviso por um erro de close().
+        try:_finish_process(process,handles)
+        finally:sender.close();receiver.close()
 
 
 def _query(send,settings,name,month,year,mappings,names,cache):
