@@ -383,10 +383,18 @@ class Interface(unittest.TestCase):
         from query_service import QueryInterrupted
         panel,folder=self.workspace_fixture()
         panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026')
+        panel.set_names(['TESTE','OUTRO'])
+        panel.filter_names();self.assertEqual(tuple(panel.names.cget('values')),('TESTE',))
         with patch('central_ui.consult',side_effect=QueryInterrupted('Consulta cancelada. Última etapa: CAPA.doc')):
             panel.query();self.wait_central(panel)
         self.assertFalse(panel.busy);self.assertFalse(self.app.busy)
         self.assertIn('CAPA.doc',panel.status.get());self.assertIsNone(panel.result)
+        self.assertEqual(tuple(panel.names.cget('values')),('OUTRO','TESTE'))
+        self.assertFalse(panel.names.instate(['disabled']))
+        with patch('central_ui.consult',side_effect=ValueError('Falha inesperada')),patch('central_ui.messagebox.showerror'):
+            panel.filter_names();panel.query();self.wait_central(panel)
+        self.assertEqual(tuple(panel.names.cget('values')),('OUTRO','TESTE'))
+        self.assertFalse(panel.busy);self.assertFalse(self.app.busy)
         panel.query();self.wait_central(panel)
         self.assertEqual(panel.result['name'],'TESTE')
 

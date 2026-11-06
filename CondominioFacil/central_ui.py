@@ -474,6 +474,7 @@ class CentralView:
                     self.busy=False;self.parent.busy=False
                     for widget in self.controls:widget.configure(state='normal')
                     self.names.configure(state='normal');self.month_box.configure(state='readonly');self.cancel_button.configure(state='disabled')
+                    self.set_names(self.catalog_names)
                     self.refresh_book_status()
                     self.parent.events.put(('central_done',None))
                     if getattr(self.parent,'close_pending',False):self.parent.after_idle(self.parent.close)
