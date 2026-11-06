@@ -13,7 +13,7 @@ def periods(text):
     return sorted(values,key=lambda p:(p[1],[normalize(m) for m in MONTHS].index(p[0])))
 
 
-def inspect_periods(result,cache=None,word_factory=None,cancel=None):
+def inspect_periods(result,cache=None,word_factory=None,cancel=None,progress=None):
     """Não consulta modelos antigos nem a competência escolhida; lê os arquivos atuais."""
     cache=cache if cache is not None else {}
     entries=[]
@@ -29,7 +29,9 @@ def inspect_periods(result,cache=None,word_factory=None,cancel=None):
             if cancel is not None and cancel.is_set():
                 entry['issue']='consulta cancelada';continue
             try:
-                path=Path(path);before=digest(path);key=(str(path),before)
+                path=Path(path)
+                if progress:progress('Lendo competência: '+str(path))
+                before=digest(path);key=(str(path),before)
                 if key in cache:
                     entry['periods']=cache[key];continue
                 if path.suffix.lower()=='.docx':
@@ -63,3 +65,4 @@ def period_summary(result):
         parts.append(e['label']+': '+value)
     prefix='Competências diferentes nos Words.' if len(unique)>1 else 'Competência dos Words: leitura incompleta.'
     return prefix+'\n'+'\n'.join(parts)
+

@@ -133,10 +133,12 @@ def compare_reports(word,pdf,source,workspace):
     result['hashes']=before
     return result
 
-def search(settings,name,month,year,mappings=None,names=None):
+def search(settings,name,month,year,mappings=None,names=None,progress=None):
     names=catalog(settings) if names is None else list(names)
     if name not in names:raise ValueError('Condomínio não encontrado na pasta principal configurada.')
     home=Path(settings['root'])/name
+    progress=progress or (lambda text:None)
+    progress('Localizando fechamento: '+str(home))
     overrides=settings.get('overrides',{}).get(name,{})
     warnings=[]
     try:
@@ -156,6 +158,7 @@ def search(settings,name,month,year,mappings=None,names=None):
     else:
         folder=Path(settings['statements'])/str(year)/f'{month:02}'
         try:
+            progress('Localizando extratos: '+str(folder))
             for path in sorted(folder.iterdir(),key=lambda p:norm(p.name)):
                 if not path.is_file() or path.suffix.lower()!='.pdf':continue
                 matched=statement_owners(path.stem,names,settings.get('statement_aliases'))
@@ -165,6 +168,7 @@ def search(settings,name,month,year,mappings=None,names=None):
                 identified=next(iter(matched)) if matched else None
                 if identified is None:
                     try:
+                        progress('Identificando extrato: '+str(path))
                         header='\n'.join(pdf_text(path,True).splitlines()[:25])[:1600]
                         matched=statement_owners(header,names,settings.get('statement_aliases'))
                         if len(matched)>1:
@@ -182,6 +186,7 @@ def search(settings,name,month,year,mappings=None,names=None):
     reports=[];originals=[]
     for key,folder,extensions in [('report_pdf',Path(settings['reports']) if settings['reports'] else None,('.pdf',)),('report_word',home/'JURIDICO',('.doc','.docx'))]:
         candidates=[]
+        progress('Localizando relatório: '+str(folder))
         if overrides.get(key):candidates=[Path(overrides[key])]
         elif folder:
             try:
@@ -197,6 +202,7 @@ def search(settings,name,month,year,mappings=None,names=None):
     for row in rows:
         path=row['path']
         allowed=('.doc','.docx') if row['group']=='closing' else ('.pdf',)
+        if path:progress('Validando arquivo: '+str(path))
         if path and (not path.is_file() or path.is_symlink() or path.suffix.lower() not in allowed):row['path']=None
         row['printer']=settings['report_printer'] if row['group']=='obligations' else settings['main_printer']
     return {'name':name,'period':period,'rows':rows,'word':originals[0] if len(originals)==1 else None,'warnings':warnings}
@@ -220,3 +226,4 @@ def verify_plan(rows):
         if digest(Path(row['path']))!=row['hash']:raise ValueError('Arquivo mudou; consulte novamente antes de imprimir.')
         for path,sha in row.get('comparison_hashes',{}).items():
             if digest(Path(path))!=sha:raise ValueError('Relatórios mudaram após a comparação. Compare novamente.')
+

@@ -12,6 +12,7 @@ from tkinter import ttk,filedialog,messagebox
 from central_service import DEFAULTS,LABELS,catalog,search,compare_reports,selected_plan,digest,validate_statement_aliases
 from central_print import execute_plan
 from obligations import check_obligations
+from query_service import consult,QueryInterrupted
 from word_service import Word,discover
 from central_update import prepare_closing,closing_condo,run_update
 from print_service import available_printers
@@ -363,9 +364,8 @@ class CentralView:
         names=self.catalog_names
         self.document_period.set('Competência dos Words: consultando…')
         def work():
-            result=search(settings,name,month,year,mappings,names=names)
-            inspect_periods(result,self.period_cache,Word,self.cancel)
-            return check_obligations(result,month,year)
+            return consult(settings,name,month,year,mappings,names,self.period_cache,self.cancel,
+                           lambda text:self.events.put(('log',text)))
         self.run(work,'search')
 
     def run(self,work,kind):
@@ -378,15 +378,19 @@ class CentralView:
             tracking=dict(root=self.settings['root'],name=self.result['name'],period=self.result['period'],words=0,sent=[],attempt=[],planned=list(self.print_request))
             self.operation=tracking
         def worker():
-            started=time.monotonic();error='';result=None
+            started=time.monotonic();error='';result=None;stopped=False
             try:result=work()
+            except QueryInterrupted as exc:
+                stopped=True
+                self.events.put(('query_stopped',str(exc)))
             except Exception as exc:error=str(exc)
             if tracking is not None:
                 seconds=time.monotonic()-started
                 try:self.history.finish(tracking['root'],tracking['name'],tracking['period'],seconds,error)
                 except Exception as exc:error+='\nNão foi possível salvar o controle: '+str(exc)
                 result=operation_message(tracking,seconds,error,result)
-            self.events.put(('error' if error else kind,result if tracking is not None else error if error else result))
+            if not stopped:
+                self.events.put(('error' if error else kind,result if tracking is not None else error if error else result))
             self.events.put(('done',None))
         threading.Thread(target=worker,daemon=False).start()
 
@@ -441,11 +445,14 @@ class CentralView:
                     self.result=value;self.show_period(value)
                     self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
                     self.redraw();self.show_details(search_message(value,self.checked))
-                    self.status.set('Consulta concluída. Confira o resumo e a seleção dos documentos.')
+                    self.status.set('Consulta incompleta. Veja a etapa interrompida nos detalhes.' if value.get('query_incomplete') else 'Consulta concluída. Confira o resumo e a seleção dos documentos.')
                     notice=value.get('obligation_notice') or value.get('due_notice')
                     if notice:
                         self.status.set('Revise as obrigações: há pendências anteriores ou inconsistências a corrigir.')
                         messagebox.showwarning('Corrigir relatório de obrigações — '+value['name'],notice,parent=self)
+                elif kind=='query_stopped':
+                    self.document_period.set('Competência dos Words: consulta interrompida.')
+                    self.status.set(value);self.show_details(value)
                 elif kind=='duplicates':
                     text,answer,ready=value
                     answer.append(messagebox.askyesno('Possível impressão repetida',text,parent=self))
@@ -785,3 +792,4 @@ class CentralPanel(CentralView,ttk.Frame):
     def __init__(self,parent,path):
         ttk.Frame.__init__(self,parent)
         self.build(parent,path,embedded=True)
+

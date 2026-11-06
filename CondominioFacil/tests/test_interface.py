@@ -26,13 +26,23 @@ class Interface(unittest.TestCase):
         root = Path(self.tmp.name)
         self.patches = [patch('app.DATA', root), patch('app.CONFIG', root/'responsaveis.json'),
                         patch('app.MAPPINGS', root/'arquivos.json'),
-                        patch('central_ui.Word', __import__('test_central_update').Session)]
+                        patch('central_ui.Word', __import__('test_central_update').Session),
+                        patch('central_ui.consult',side_effect=self.inline_consult)]
         for item in self.patches:
             item.start()
         with patch('tkinter.PhotoImage', side_effect=AssertionError('Interface simples não deve gerar imagens')):
             self.app = App(start_central=False)
         self.app.geometry('1000x760')
         self.app.update()
+
+    @staticmethod
+    def inline_consult(settings,name,month,year,mappings,names,cache,cancel,progress):
+        # Os cenários de interface usam Words falsos; o isolamento real é testado
+        # separadamente e também pelo executável instalado no CI.
+        import central_ui as ui
+        result=ui.search(settings,name,month,year,mappings,names=names)
+        ui.inspect_periods(result,cache,ui.Word,cancel)
+        return ui.check_obligations(result,month,year)
 
     def tearDown(self):
         panel=getattr(self.app,'central_panel',None)
@@ -368,6 +378,17 @@ class Interface(unittest.TestCase):
             save.invoke();self.assertTrue(dialog.winfo_exists());error.assert_called_once()
             self.assertEqual(load_settings(panel.path)['statement_aliases']['TESTE'],['Nome antigo','Apelido'])
             dialog.destroy()
+
+    def test_interrupted_query_unlocks_controls_and_can_consult_next_condo(self):
+        from query_service import QueryInterrupted
+        panel,folder=self.workspace_fixture()
+        panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026')
+        with patch('central_ui.consult',side_effect=QueryInterrupted('Consulta cancelada. Última etapa: CAPA.doc')):
+            panel.query();self.wait_central(panel)
+        self.assertFalse(panel.busy);self.assertFalse(self.app.busy)
+        self.assertIn('CAPA.doc',panel.status.get());self.assertIsNone(panel.result)
+        panel.query();self.wait_central(panel)
+        self.assertEqual(panel.result['name'],'TESTE')
 
     def test_workspace_controls_pause_during_sheet_or_roster_background_work(self):
         panel,folder=self.workspace_fixture()
@@ -715,3 +736,4 @@ class Interface(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
