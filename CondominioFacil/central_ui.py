@@ -363,9 +363,13 @@ class CentralView:
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
         names=self.catalog_names
         self.document_period.set('Competência dos Words: consultando…')
+        hint=None
+        if self.parent.folder.get()==settings['root']:
+            known=next((c for c in self.parent.condos if c['name']==name),None)
+            if known:hint=dict(name=name,folder=known['folder'],root=settings['root'])
         def work():
             return consult(settings,name,month,year,mappings,names,self.period_cache,self.cancel,
-                           lambda text:self.events.put(('log',text)))
+                           lambda text:self.events.put(('log',text)),closing_hint=hint)
         self.run(work,'search')
 
     def run(self,work,kind):

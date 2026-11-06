@@ -93,6 +93,25 @@ class Central(unittest.TestCase):
         self.assertEqual(statement_owners('ALFA e MESMO NOME',['ALFA','ALFA JARDIM'],self.cfg['statement_aliases']),{'ALFA','ALFA JARDIM'})
         self.assertEqual(statement_owners('Nome órfão',['ALFA'],{'OUTRO':['Nome órfão']}),set())
 
+    def test_known_closing_folder_is_reused_and_fresh_files_still_validated(self):
+        from central_service import discover
+        hint=dict(root=self.cfg['root'],name='ALFA',folder=str(Path(self.cfg['root'])/'ALFA'/'FECHAMENTO DE LIVRO'))
+        with patch('central_service.discover',wraps=discover) as find:
+            result=search(self.cfg,'ALFA',9,2026,closing_hint=hint)
+        self.assertEqual(find.call_count,1)
+        self.assertEqual(Path(find.call_args.args[0]),Path(hint['folder']))
+        capa=next(r['path'] for r in result['rows'] if r['key']=='closing1')
+        capa.rename(capa.with_name('CAPA.doc'))
+        result=search(self.cfg,'ALFA',9,2026,closing_hint=hint)
+        self.assertEqual(next(r['path'].name for r in result['rows'] if r['key']=='closing1'),'CAPA.doc')
+        moved=Path(hint['folder']).with_name('FECHAMENTO DE LIVROS')
+        Path(hint['folder']).rename(moved)
+        result=search(self.cfg,'ALFA',9,2026,closing_hint=hint)
+        self.assertEqual(next(r['path'].parent for r in result['rows'] if r['key']=='closing1'),moved)
+        with patch('central_service.discover',wraps=discover) as find:
+            search(self.cfg,'ALFA JARDIM',9,2026,closing_hint=hint)
+        self.assertEqual(Path(find.call_args.args[0]),Path(self.cfg['root'])/'ALFA JARDIM')
+
     def test_reports_have_no_competence_and_ambiguous_legal_requires_binding(self):
         first=self.lookup();next_month=search(self.cfg,'ALFA',10,2026)
         self.assertEqual(first['word'],next_month['word'])
@@ -176,3 +195,4 @@ class Central(unittest.TestCase):
         self.assertEqual(before,{p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
 if __name__=='__main__':unittest.main()
+

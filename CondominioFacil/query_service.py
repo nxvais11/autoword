@@ -96,7 +96,7 @@ def run_isolated(target,args=(),cancel=None,progress=None,*,timeout=45,total_tim
         finally:sender.close();receiver.close()
 
 
-def _query(send,settings,name,month,year,mappings,names,cache):
+def _query(send,settings,name,month,year,mappings,names,cache,closing_hint):
     from central_service import search
     from document_period import inspect_periods
     from obligations import check_obligations
@@ -107,7 +107,7 @@ def _query(send,settings,name,month,year,mappings,names,cache):
         send(('word',win32process.GetWindowThreadProcessId(app.Hwnd)[1]))
     def factory():return Word(on_created=created)
     progress('Localizando arquivos de '+name)
-    result=search(settings,name,month,year,mappings,names=names,progress=progress)
+    result=search(settings,name,month,year,mappings,names=names,progress=progress,closing_hint=closing_hint)
     send(('partial',result))
     inspect_periods(result,cache,factory,progress=progress)
     send(('partial',result))
@@ -116,8 +116,8 @@ def _query(send,settings,name,month,year,mappings,names,cache):
     return result
 
 
-def consult(settings,name,month,year,mappings,names,cache,cancel,progress):
-    value=run_isolated(_query,(settings,name,month,year,mappings,names,copy.deepcopy(cache)),cancel,progress)
+def consult(settings,name,month,year,mappings,names,cache,cancel,progress,closing_hint=None):
+    value=run_isolated(_query,(settings,name,month,year,mappings,names,copy.deepcopy(cache),closing_hint),cancel,progress)
     cache.update(value.pop('_period_cache',{}))
     return value
 

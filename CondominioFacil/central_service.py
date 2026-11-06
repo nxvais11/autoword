@@ -133,7 +133,7 @@ def compare_reports(word,pdf,source,workspace):
     result['hashes']=before
     return result
 
-def search(settings,name,month,year,mappings=None,names=None,progress=None):
+def search(settings,name,month,year,mappings=None,names=None,progress=None,closing_hint=None):
     names=catalog(settings) if names is None else list(names)
     if name not in names:raise ValueError('Condomínio não encontrado na pasta principal configurada.')
     home=Path(settings['root'])/name
@@ -142,7 +142,14 @@ def search(settings,name,month,year,mappings=None,names=None,progress=None):
     overrides=settings.get('overrides',{}).get(name,{})
     warnings=[]
     try:
-        condos=discover(home,mappings or {})
+        condos=None
+        if closing_hint and closing_hint.get('name')==name and closing_hint.get('root')==settings['root']:
+            folder=Path(closing_hint['folder'])
+            if folder.name==name or (folder.parent.name==name and filename_key(folder.name) in CLOSING_FOLDERS):
+                progress('Localizando fechamento pelo caminho conhecido: '+str(folder))
+                try:condos=discover(folder,mappings or {})
+                except (OSError,ValueError):pass
+        if condos is None:condos=discover(home,mappings or {})
         condo=condos[0] if len(condos)==1 else None
     except (OSError,ValueError) as exc:
         condo=None;warnings.append('Fechamento: '+str(exc))

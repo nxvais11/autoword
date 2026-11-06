@@ -36,11 +36,11 @@ class Interface(unittest.TestCase):
         self.app.update()
 
     @staticmethod
-    def inline_consult(settings,name,month,year,mappings,names,cache,cancel,progress):
+    def inline_consult(settings,name,month,year,mappings,names,cache,cancel,progress,closing_hint=None):
         # Os cenários de interface usam Words falsos; o isolamento real é testado
         # separadamente e também pelo executável instalado no CI.
         import central_ui as ui
-        result=ui.search(settings,name,month,year,mappings,names=names)
+        result=ui.search(settings,name,month,year,mappings,names=names,closing_hint=closing_hint)
         ui.inspect_periods(result,cache,ui.Word,cancel)
         return ui.check_obligations(result,month,year)
 

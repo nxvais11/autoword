@@ -43,14 +43,20 @@ def document_kind(stem):
     return None
 
 def word_files(folder):
-    return sorted(p for p in Path(folder).iterdir() if p.is_file() and not p.is_symlink()
-                  and p.suffix.lower() in ('.doc', '.docx') and not p.name.startswith('~$'))
+    # A enumeração SMB já traz os atributos; evita um stat remoto por entrada.
+    with os.scandir(folder) as entries:
+        return sorted(Path(e.path) for e in entries if not e.name.startswith('~$')
+                      and Path(e.name).suffix.lower() in ('.doc','.docx')
+                      and e.is_file(follow_symlinks=False))
 
 CLOSING_FOLDERS = {'fechamento de livro','fechamento de livros','fechamento livro','fechamento livros','prestacao de contas'}
 
 def _children(folder):
-    return sorted(p for p in folder.iterdir() if p.is_dir() and not p.is_symlink()
-                  and not p.name.startswith('.') and not re.fullmatch(r'20\d{2}[-_]\d{2}(?:[_ ].*)?',p.name))
+    with os.scandir(folder) as entries:
+        return sorted(Path(e.path) for e in entries if not e.name.startswith('.')
+                      and not re.fullmatch(r'20\d{2}[-_]\d{2}(?:[_ ].*)?',e.name)
+                      and e.is_dir(follow_symlinks=False))
+
 
 def select_files(folder, paths):
     """Vinculação explícita: um arquivo distinto por tipo, todos na mesma pasta."""
