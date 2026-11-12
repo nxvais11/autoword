@@ -49,7 +49,8 @@ def word_files(folder):
                       and Path(e.name).suffix.lower() in ('.doc','.docx')
                       and e.is_file(follow_symlinks=False))
 
-CLOSING_FOLDERS = {'fechamento de livro','fechamento de livros','fechamento livro','fechamento livros','prestacao de contas'}
+CLOSING_FOLDERS = {'fechamento de livro','fechamento de livros','fechamento do livro',
+                   'fechamento dos livros','fechamento livro','fechamento livros','prestacao de contas'}
 
 def _children(folder):
     with os.scandir(folder) as entries:
@@ -405,4 +406,5 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
     if targets:
         return Path(next(iter(targets.values())))
     return output
+
 

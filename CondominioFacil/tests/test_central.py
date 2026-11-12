@@ -46,6 +46,25 @@ class Central(unittest.TestCase):
         direct=root/'DIRETO';direct.mkdir();(direct/'CAPA.doc').write_text('modelo')
         self.assertEqual(catalog(self.cfg),['ALFA','ALFA JARDIM','DIRETO','NOVO'])
 
+    def test_ilha_da_madeira_do_livro_folder_is_listed_and_documents_are_found(self):
+        from word_service import discover
+        name='ILHA DA MADEIRA';home=Path(self.cfg['root'])/name
+        closing=home/'FECHAMENTO DO LIVRO';closing.mkdir(parents=True)
+        for stem in FILES:(closing/(stem+'.doc')).write_text('Documento de fechamento')
+        for folder_name in ('FECHAMENTO DO LIVRO','FECHAMENTO DOS LIVROS'):
+            with self.subTest(folder=folder_name):
+                target=home/folder_name
+                if closing!=target:closing.rename(target);closing=target
+                self.assertIn(name,catalog(self.cfg))
+                discovered=next(c for c in discover(self.cfg['root']) if c['name']==name)
+                self.assertEqual(Path(discovered['folder']),closing)
+                result=search(self.cfg,name,9,2026)
+                words=[r['path'] for r in result['rows'] if r['group']=='closing']
+                self.assertEqual(len(words),4)
+                self.assertTrue(all(p and p.parent==closing for p in words))
+        (Path(self.cfg['root'])/'ARQUIVO'/'FECHAMENTO DO LIVRO ANTIGO').mkdir(parents=True)
+        self.assertNotIn('ARQUIVO',catalog(self.cfg))
+
     def test_compound_names_and_token_boundaries(self):
         names=['ALFA','ALFA JARDIM']
         self.assertEqual(owner('extrato ALFA JARDIM poup',names),'ALFA JARDIM')
@@ -195,4 +214,5 @@ class Central(unittest.TestCase):
         self.assertEqual(before,{p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
 if __name__=='__main__':unittest.main()
+
 
