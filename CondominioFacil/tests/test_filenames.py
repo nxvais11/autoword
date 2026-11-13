@@ -3,6 +3,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from engine import FILES
 from word_service import document_kind, discover, inspect_condo, generate, output_targets
@@ -58,6 +59,47 @@ class FlexibleFilenames(unittest.TestCase):
         resolved = discover(folder,{str(folder):[str(p) for p in chosen]})[0]
         self.assertFalse(resolved['errors'])
         self.assertEqual(resolved['files'],chosen)
+    def test_dedicated_closing_folder_precedes_loose_word_in_condo_root(self):
+        home=self.root/'AMÉRICA - I';folder=home/'FECHAMENTO DE LIVROS'
+        names=[stem+'.doc' for stem in FILES];self.make_files(folder,names)
+        (home/'CAPA.doc').write_text('Documento avulso')
+        for root in (self.root,home,folder):
+            found=discover(root)
+            self.assertEqual(len(found),1)
+            self.assertEqual(found[0]['name'],'AMÉRICA - I')
+            self.assertEqual(Path(found[0]['folder']),folder)
+            self.assertFalse(found[0]['errors'])
+        # Um vínculo explícito e válido na raiz continua sendo respeitado.
+        chosen=[]
+        for k in range(4):
+            path=home/(f'documento escolhido {k}.doc');path.write_text('AGOSTO/2026');chosen.append(str(path))
+        mapping={str(home/'..'/'AMÉRICA - I'):chosen}
+        found=discover(home,mapping)[0]
+        self.assertEqual(found['files'],[Path(p) for p in chosen]);self.assertFalse(found['errors'])
+
+    def test_loose_root_word_does_not_resolve_ambiguous_dedicated_folders(self):
+        home=self.root/'A'
+        for child in ('FECHAMENTO DE LIVRO','FECHAMENTO DE LIVROS'):
+            self.make_files(home/child,[stem+'.doc' for stem in FILES])
+        (home/'CAPA.doc').write_text('Outro documento')
+        found=discover(home)[0]
+        self.assertTrue(all(p is None for p in found['files']))
+        self.assertTrue(any('Mais de uma pasta' in error for error in found['errors']))
+
+    def test_unavailable_bindings_of_other_condos_cannot_block_auto_discovery(self):
+        home=self.root/'AMÉRICA - I';folder=home/'FECHAMENTO DE LIVROS'
+        self.make_files(folder,[stem+'.doc' for stem in FILES])
+        unrelated=self.root/'OUTRO CONDOMINIO'/'FECHAMENTO DE LIVROS'
+        related=self.root/'REDE ANTIGA'/'AMÉRICA - I'/'FECHAMENTO DE LIVROS'
+        original=Path.resolve
+        def resolve(path,*args,**kwargs):
+            if path==unrelated:raise AssertionError('Não deve acessar a rede de outro condomínio')
+            if path==related:raise OSError('Compartilhamento antigo indisponível')
+            return original(path,*args,**kwargs)
+        with patch.object(Path,'resolve',resolve):
+            found=discover(home,{str(unrelated):[],str(related):[]})[0]
+        self.assertFalse(found['errors']);self.assertTrue(all(found['files']))
+
     def test_generation_preserves_short_names_and_does_not_create_canonical_duplicates(self):
         folder = self.root/'A'
         names = ['APROVAÇÃO DE CONTAS.doc','CAPA.doc','Anexo1.doc','Anexo2.doc']
@@ -79,3 +121,4 @@ class FlexibleFilenames(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+

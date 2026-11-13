@@ -131,6 +131,48 @@ class Central(unittest.TestCase):
             search(self.cfg,'ALFA JARDIM',9,2026,closing_hint=hint)
         self.assertEqual(Path(find.call_args.args[0]),Path(self.cfg['root'])/'ALFA JARDIM')
 
+    def test_america_files_are_automatically_linked_despite_root_word_and_stale_bindings(self):
+        name='AMÉRICA - I';home=Path(self.cfg['root'])/name;closing=home/'FECHAMENTO DE LIVROS'
+        closing.mkdir(parents=True)
+        for stem in FILES:(closing/(stem+'.doc')).write_text('SETEMBRO/2026')
+        (home/'CAPA.doc').write_text('Documento avulso na raiz')
+        self.cfg['overrides']={name:{f'closing{k}':str(home/'PASTA ANTIGA'/(FILES[k]+'.doc')) for k in range(4)}}
+        hint=dict(name=name,root=self.cfg['root'],folder=str(home))
+        before={p:p.read_bytes() for p in home.rglob('*.doc')}
+        result=search(self.cfg,name,10,2026,closing_hint=hint)
+        words=[r for r in result['rows'] if r['group']=='closing']
+        self.assertEqual(len(words),4)
+        self.assertTrue(all(r['path'] and r['path'].parent==closing for r in words))
+        self.assertEqual(Path(result['closing_folder']),closing)
+        self.assertTrue(any('vínculo salvo indisponível' in warning for warning in result['warnings']))
+        self.assertEqual(before,{p:p.read_bytes() for p in home.rglob('*.doc')})
+        from console_messages import search_message
+        self.assertIn(str(closing),search_message(result,set())['details'])
+
+    def test_invalid_cached_hint_does_not_hide_real_closing_folder(self):
+        from central_service import discover
+        home=Path(self.cfg['root'])/'ALFA';closing=home/'FECHAMENTO DE LIVRO'
+        hint=dict(name='ALFA',root=self.cfg['root'],folder=str(closing))
+        real=discover(home);partial=dict(real[0],files=[None]*4,errors=['Leitura incompleta'])
+        with patch('central_service.discover',side_effect=[[partial],real]) as find:
+            result=search(self.cfg,'ALFA',9,2026,closing_hint=hint)
+        self.assertEqual(find.call_count,2)
+        self.assertEqual(Path(find.call_args_list[-1].args[0]),home)
+        self.assertTrue(all(r['path'] for r in result['rows'] if r['group']=='closing'))
+
+    def test_valid_manual_links_remain_valid_and_ambiguous_automatic_files_not_guessed(self):
+        home=Path(self.cfg['root'])/'ALFA';closing=home/'FECHAMENTO DE LIVRO'
+        manual=home/'capa personalizada.doc';manual.write_text('Modelo escolhido pelo usuário')
+        self.cfg['overrides']={'ALFA':{'closing1':str(manual)}}
+        result=self.lookup()
+        self.assertEqual(next(r['path'] for r in result['rows'] if r['key']=='closing1'),manual)
+        self.cfg['overrides']['ALFA']['closing1']=str(home/'modelo removido.doc')
+        (closing/'CAPA.doc').write_text('Segundo candidato')
+        result=self.lookup()
+        self.assertIsNone(next(r['path'] for r in result['rows'] if r['key']=='closing1'))
+        from console_messages import search_message
+        self.assertIn('CAPA.doc',search_message(result,set())['details'])
+
     def test_reports_have_no_competence_and_ambiguous_legal_requires_binding(self):
         first=self.lookup();next_month=search(self.cfg,'ALFA',10,2026)
         self.assertEqual(first['word'],next_month['word'])
@@ -214,5 +256,6 @@ class Central(unittest.TestCase):
         self.assertEqual(before,{p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
 if __name__=='__main__':unittest.main()
+
 
 

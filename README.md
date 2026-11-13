@@ -267,3 +267,18 @@ Se nenhum campo de data for reconhecido, isso é informado sem bloquear os outro
 documentos. Um original sem nenhuma alteração solicitada não é regravado.
 Falhas de leitura, de gravação e de conferência dos responsáveis continuam sendo
 tratadas como falhas; não há impressão automática após uma geração malsucedida.
+
+## Identificação automática do fechamento
+
+Uma pasta dedicada de fechamento tem prioridade sobre Words avulsos na raiz do
+condomínio. Vínculos manuais válidos continuam sendo respeitados; duas pastas
+dedicadas sem escolha explícita permanecem ambíguas. Se o caminho em cache
+retornar arquivos incompletos ou ambíguos, a consulta repete a descoberta atual.
+
+Quando um vínculo individual aponta para um arquivo removido, um documento
+reconhecido sem ambiguidade na pasta atual é usado automaticamente. Após a
+consulta, apenas esse vínculo antigo é removido da configuração, preservando
+os demais cadastros e vínculos. Sem identificação segura, o arquivo permanece
+pendente para vinculação. Ver detalhes informa a pasta consultada e, em caso
+de pendência, os nomes dos Words encontrados ali. Nenhum documento é alterado
+nessa consulta.

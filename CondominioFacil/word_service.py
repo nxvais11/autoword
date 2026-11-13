@@ -73,6 +73,25 @@ def select_files(folder, paths):
     return {'folder': str(folder), 'name': folder.name, 'files': files, 'errors': [],
             'found': [p.name for p in word_files(folder)]}
 
+def _saved_mapping(folder,mappings,resolve=False):
+    if not mappings:return None
+    if str(folder) in mappings:return mappings[str(folder)]
+    key=os.path.normcase(os.path.abspath(folder))
+    for name,value in mappings.items():
+        if not name.startswith('__') and os.path.normcase(os.path.abspath(name))==key:return value
+    if resolve:
+        tail=tuple(filename_key(part) for part in Path(os.path.abspath(folder)).parts[-2:])
+        for name,value in mappings.items():
+            if name.startswith('__'):continue
+            # Não consulta caminhos de outros condomínios na rede.
+            other=tuple(filename_key(part) for part in Path(os.path.abspath(name)).parts[-2:])
+            if other!=tail:continue
+            try:
+                if Path(name).resolve()==folder:return value
+            except OSError:continue
+    return None
+
+
 def discover(root, mappings=None, progress=None):
     root = Path(root).resolve()
     # A seleção pode ser a pasta principal ou a pasta do próprio condomínio.
@@ -90,13 +109,18 @@ def discover(root, mappings=None, progress=None):
             candidates = root_files if owner==root else word_files(owner)
         except OSError as exc:
             candidates,discovery_error = [],str(exc)
-        nested = []
-        if not discovery_error and not any(document_kind(p.stem) is not None for p in candidates):
+        nested = [];manual_root=None
+        if not discovery_error and filename_key(owner.name) not in CLOSING_FOLDERS:
             try:
-                nested = [p for p in _children(owner) if filename_key(p.name) in CLOSING_FOLDERS]
-                if len(nested)==1:
+                nested = closing_children if owner==root else [p for p in _children(owner) if filename_key(p.name) in CLOSING_FOLDERS]
+                root_binding=_saved_mapping(owner,mappings)
+                if nested and root_binding is not None:
+                    try:manual_root=select_files(owner,root_binding)
+                    except (OSError,ValueError):pass
+                if manual_root is None and len(nested)==1:
                     folder = nested[0]
                     candidates = word_files(folder)
+                elif manual_root is not None:nested=[]
             except OSError as exc:
                 candidates,discovery_error = [],str(exc)
         files, errors = [], []
@@ -113,12 +137,9 @@ def discover(root, mappings=None, progress=None):
             files.append(matches[0] if len(matches) == 1 else None)
         condo = {'folder': str(folder), 'name': folder.name, 'files': files, 'errors': errors,
                  'found': [p.name for p in candidates]}
-        mapping=None
-        if mappings:
-            mapping=mappings.get(str(folder))
-            if mapping is None:
-                mapping=next((v for k,v in mappings.items() if not k.startswith('__') and Path(k).resolve()==folder),None)
-        if mapping is not None:
+        mapping=_saved_mapping(folder,mappings,resolve=True)
+        if manual_root is not None:condo=manual_root
+        elif mapping is not None:
             try:
                 condo = select_files(folder, mapping)
             except Exception as exc:
