@@ -31,7 +31,7 @@ class CentralUpdate(unittest.TestCase):
         self.log=[]
     def tearDown(self):self.tmp.cleanup()
     def run_update(self,**kwargs):
-        return run_update(self.result,self.settings,11,2026,self.state,self.cancel,self.log.append,word_factory=Session,printer=self.printer,**kwargs)
+        return run_update(self.result,self.settings,11,2026,self.state,self.cancel,self.log.append,word_factory=kwargs.pop('word_factory',Session),printer=self.printer,**kwargs)
     def test_updates_all_words_then_prints_in_book_order_and_correct_month(self):
         rows=selected_plan(self.result,{0,1,2,3,4})
         def send(plan,*args):
@@ -80,7 +80,11 @@ class CentralUpdate(unittest.TestCase):
         (self.folder/(FILES[3]+'.doc')).write_text('Sem competência')
         before={p:p.read_bytes() for p in self.folder.iterdir()}
         rows=selected_plan(self.result,{0,1,2,3,4})
-        with self.assertRaises(ValueError):self.run_update(print_rows=rows)
+        class Broken(Session):
+            def read(self,path):
+                if Path(path).name==FILES[3]+'.doc':raise ValueError('Word não pôde ser lido')
+                return super().read(path)
+        with self.assertRaises(ValueError):self.run_update(print_rows=rows,word_factory=Broken)
         self.printer.assert_not_called();self.assertEqual(before,{p:p.read_bytes() for p in before})
     def test_save_failure_never_prints(self):
         class Broken(Session):
@@ -125,3 +129,4 @@ class CentralUpdate(unittest.TestCase):
         self.state['sheet_monitor']=Mock()
         with self.assertRaisesRegex(ValueError,'Nenhuma linha'):self.run_update()
         self.state['sheet_monitor'].require_current.assert_called()
+

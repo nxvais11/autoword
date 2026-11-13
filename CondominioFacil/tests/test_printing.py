@@ -112,6 +112,9 @@ class Printing(unittest.TestCase):
         class SessionWord(FakeWord):
             def __enter__(self): return self
             def __exit__(self, *args): pass
+            def read(self,path):
+                if broken and Path(path)==condos[0]['files'][1]:raise OSError('Falha na leitura do Word')
+                return super().read(path)
         if broken:
             condos[0]['files'][1].write_text('competência ausente')
         with patch('app.Word', SessionWord):
@@ -148,3 +151,4 @@ class Printing(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

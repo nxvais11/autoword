@@ -46,10 +46,38 @@ class Dates(unittest.TestCase):
         self.assertEqual(apply_text(original, changes), APPROVAL)
         self.assertIsNone(baseline)
 
-    def test_wrong_count(self):
-        for text in ('Sem data', 'AGOSTO/2026 AGOSTO/2026', '08/2026'):
-            with self.assertRaises(ValueError):
-                plan(text, 1, 11, 2026)
+    def test_variable_counts_and_no_date_do_not_block(self):
+        for kind in range(4):
+            for count in (0,1,2,3,5):
+                original='Texto sem datas. ' + ' '.join(['AGOSTO/2026']*count)
+                changes,baseline=plan(original,kind,11,2026)
+                self.assertEqual(apply_text(original,changes),'Texto sem datas. '+ ' '.join(['NOVEMBRO/2026']*count))
+                self.assertEqual(len(changes),count)
+                self.assertEqual(baseline,('agosto',2026) if count else None)
+
+    def test_approval_variant_with_only_one_reference_and_one_long_date(self):
+        original=('Guarulhos, 31 de Setembro de 2026.  \r'
+                  'Ref.: TERMO DE APROVAÇÃO DE CONTAS – SETEMBRO/2026\r'
+                  'Vimos pelo presente comunicar que os documentos da pasta em referência foram todos conferidos.\r'
+                  'Artigo 1350. Ap. 121. Data: ___/___/___')
+        changes,baseline=plan(original,0,2,2028)
+        result=apply_text(original,changes)
+        self.assertEqual(len(changes),2);self.assertEqual(baseline,('setembro',2026))
+        self.assertIn('29 de Fevereiro de 2028',result)
+        self.assertIn('FEVEREIRO/2028',result)
+        self.assertIn('Artigo 1350. Ap. 121. Data: ___/___/___',result)
+
+    def test_all_date_formats_and_counts_preserve_separators_and_blank_fields(self):
+        original='09/2026; 9-2026; 30/09/2026.; 1 - 9 - 2026; SETEMBRO DE 2026; Setembro-2026; 30 de Setembro de 2026; 1 de setembro de 2026; marco/2026; Data: ___/___/___'
+        for kind in range(4):
+            changes,_=plan(original,kind,2,2028)
+            self.assertEqual(apply_text(original,changes),'02/2028; 2-2028; 29/02/2028.; 29 - 2 - 2028; FEVEREIRO DE 2028; Fevereiro-2028; 29 de Fevereiro de 2028; 29 de fevereiro de 2028; fevereiro/2028; Data: ___/___/___')
+            self.assertEqual(len(changes),9)
+        # CPF/CNPJ, artigos, valores e anos isolados não são campos de data.
+        original='CNPJ 12.345.678/0001-90; CPF 123.456.789-01; Artigo 1350; R$ 2026,09; 2026; 13/2026; 0001/2026'
+        self.assertEqual(plan(original,0,2,2028)[0],[])
+        for month,year in ((0,2026),(13,2026),(1,1999)):
+            with self.assertRaises(ValueError):plan('Sem data',0,month,year)
 
     def test_utf16(self):
         self.assertEqual(utf16_offset('😀a', 1), 2)
@@ -261,3 +289,4 @@ class Batch(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

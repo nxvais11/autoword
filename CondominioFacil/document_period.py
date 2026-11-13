@@ -3,13 +3,12 @@ from contextlib import ExitStack
 from pathlib import Path
 from zipfile import ZipFile
 import xml.etree.ElementTree as ET
-from engine import MONTHS, REFERENCE, LONG_DATE, normalize
+from engine import MONTHS, date_baselines, normalize
 from word_service import Word, digest
 
 
 def periods(text):
-    values={(normalize(m[1]),int(m[3])) for m in REFERENCE.finditer(text)}
-    values.update((normalize(m[3]),int(m[5])) for m in LONG_DATE.finditer(text))
+    values=date_baselines(text)
     return sorted(values,key=lambda p:(p[1],[normalize(m) for m in MONTHS].index(p[0])))
 
 
@@ -65,4 +64,5 @@ def period_summary(result):
         parts.append(e['label']+': '+value)
     prefix='Competências diferentes nos Words.' if len(unique)>1 else 'Competência dos Words: leitura incompleta.'
     return prefix+'\n'+'\n'.join(parts)
+
 
