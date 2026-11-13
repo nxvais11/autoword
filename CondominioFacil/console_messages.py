@@ -74,6 +74,9 @@ def search_message(result,selected):
         undated=sum(row['status']=='sem data' for row in checks)
         details+=['',f'Conferência de obrigações: {compatible} prazo(s) compatível(is); {automatic} renovação(ões) automática(s).']
         if undated:details.append(f'{undated} serviço(s) sem datas suficientes para conferir o vencimento.')
+    if result.get('closing_folder'):details+=['','Pasta de fechamento consultada: '+str(result['closing_folder'])]
+    if any(not row.get('path') for row in closing) and result.get('closing_found'):
+        details.append('Words encontrados nessa pasta: '+', '.join(result['closing_found']))
     details+=['','Arquivos deste condomínio:']
     for row in rows:
         label='Relatório PDF de obrigações' if row['group']=='obligations' else row['label']
@@ -112,3 +115,4 @@ def preview_message(name,month,year,target,docs):
         details.append(str(doc['path']))
         details.extend(f'{kind}: {old} → {new}' for old,new,kind in changes)
     return message('\n'.join(lines),'\n'.join(lines+['']+details))
+

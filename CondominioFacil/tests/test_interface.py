@@ -379,6 +379,19 @@ class Interface(unittest.TestCase):
             self.assertEqual(load_settings(panel.path)['statement_aliases']['TESTE'],['Nome antigo','Apelido'])
             dialog.destroy()
 
+    def test_auto_link_removes_only_stale_binding_after_files_are_found(self):
+        from central_ui import save_settings,load_settings
+        panel,folder=self.workspace_fixture()
+        panel.settings['overrides']={'TESTE':{'closing1':str(folder/'capa removida.doc'),'report_pdf':'relatorio escolhido.pdf'},'OUTRO':{'closing1':'outro.doc'}}
+        save_settings(panel.path,panel.settings)
+        panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026')
+        panel.query();self.wait_central(panel)
+        self.assertTrue(all(r['path'] for r in panel.result['rows'] if r['group']=='closing'))
+        config=load_settings(panel.path)
+        self.assertNotIn('closing1',config['overrides']['TESTE'])
+        self.assertEqual(config['overrides']['TESTE']['report_pdf'],'relatorio escolhido.pdf')
+        self.assertEqual(config['overrides']['OUTRO']['closing1'],'outro.doc')
+
     def test_interrupted_query_unlocks_controls_and_can_consult_next_condo(self):
         from query_service import QueryInterrupted
         panel,folder=self.workspace_fixture()
@@ -744,4 +757,5 @@ class Interface(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 

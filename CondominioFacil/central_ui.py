@@ -443,6 +443,13 @@ class CentralView:
                     if candidate in value:self.name.set(candidate)
                     self.status.set('Selecione o nome do condomínio e busque os arquivos.')
                 elif kind=='search':
+                    if value.get('discarded_closing_bindings'):
+                        try:
+                            current=load_settings(self.path);bindings=current.get('overrides',{}).get(value['name'],{});changed=False
+                            for key,old in value['discarded_closing_bindings'].items():
+                                if bindings.get(key)==old:bindings.pop(key);changed=True
+                            if changed:save_settings(self.path,current);self.settings=current
+                        except Exception as exc:value['warnings'].append('Arquivos identificados, mas não foi possível remover o vínculo antigo: '+str(exc))
                     self.history.touch(self.settings['root'],value['name'])
                     self.set_names(self.catalog_names)
                     self.refresh_book_status()
@@ -797,4 +804,5 @@ class CentralPanel(CentralView,ttk.Frame):
     def __init__(self,parent,path):
         ttk.Frame.__init__(self,parent)
         self.build(parent,path,embedded=True)
+
 

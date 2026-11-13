@@ -147,15 +147,26 @@ def search(settings,name,month,year,mappings=None,names=None,progress=None,closi
             folder=Path(closing_hint['folder'])
             if folder.name==name or (folder.parent.name==name and filename_key(folder.name) in CLOSING_FOLDERS):
                 progress('Localizando fechamento pelo caminho conhecido: '+str(folder))
-                try:condos=discover(folder,mappings or {})
+                try:
+                    cached=discover(folder,mappings or {})
+                    # Resultado parcial/ambíguo do caminho antigo exige nova busca.
+                    if len(cached)==1 and all(cached[0]['files']) and not cached[0]['errors']:condos=cached
                 except (OSError,ValueError):pass
         if condos is None:condos=discover(home,mappings or {})
         condo=condos[0] if len(condos)==1 else None
     except (OSError,ValueError) as exc:
         condo=None;warnings.append('Fechamento: '+str(exc))
-    rows=[]
+    rows=[];discarded_bindings={}
     for kind in ORDER:
-        path=Path(overrides[f'closing{kind}']) if overrides.get(f'closing{kind}') else condo['files'][kind] if condo else None
+        path=condo['files'][kind] if condo else None
+        bound=overrides.get(f'closing{kind}')
+        if bound:
+            saved=Path(bound)
+            progress('Validando vínculo do fechamento: '+str(saved))
+            if saved.suffix.lower() in ('.doc','.docx') and saved.is_file() and not saved.is_symlink():path=saved
+            else:
+                if path:discarded_bindings[f'closing{kind}']=bound
+                warnings.append(LABELS[kind]+': vínculo salvo indisponível. '+('Arquivo identificado na pasta atual.' if path else 'Vincule o arquivo correto.'))
         rows.append({'group':'closing','label':LABELS[kind],'key':f'closing{kind}','path':path,'checked':True})
     period=f'{year}-{month:02}'
     explicit=overrides.get('statements:'+period)
@@ -212,7 +223,8 @@ def search(settings,name,month,year,mappings=None,names=None,progress=None,closi
         if path:progress('Validando arquivo: '+str(path))
         if path and (not path.is_file() or path.is_symlink() or path.suffix.lower() not in allowed):row['path']=None
         row['printer']=settings['report_printer'] if row['group']=='obligations' else settings['main_printer']
-    return {'name':name,'period':period,'rows':rows,'word':originals[0] if len(originals)==1 else None,'warnings':warnings}
+    discarded_bindings={key:old for key,old in discarded_bindings.items() if any(r['key']==key and r['path'] for r in rows)}
+    return {'name':name,'period':period,'rows':rows,'word':originals[0] if len(originals)==1 else None,'warnings':warnings,'closing_folder':condo['folder'] if condo else str(home),'closing_found':condo.get('found',[]) if condo else [],'discarded_closing_bindings':discarded_bindings}
 
 def selected_plan(result,selected,report_source='pdf',comparison=None):
     rows=[dict(row) for i,row in enumerate(result['rows']) if i in selected]
@@ -233,4 +245,5 @@ def verify_plan(rows):
         if digest(Path(row['path']))!=row['hash']:raise ValueError('Arquivo mudou; consulte novamente antes de imprimir.')
         for path,sha in row.get('comparison_hashes',{}).items():
             if digest(Path(path))!=sha:raise ValueError('Relatórios mudaram após a comparação. Compare novamente.')
+
 
