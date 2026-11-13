@@ -43,6 +43,19 @@ class DirectOutput(unittest.TestCase):
                  messages.append,threading.Event(),targets=output_targets(self.condos,month,2026),
                  overwrite_sources=allow,models=self.models,cache=self.cache,automatic=automatic)
         return messages
+    def test_original_without_date_or_other_changes_is_not_rewritten(self):
+        original='Documento sem data. Artigo 1350. Data: ___/___/___'
+        self.source.write_text(original,encoding='utf-8')
+        before=self.source.read_bytes()
+        docs=inspect_condo(self.word,self.condos[0],11,2026,[],(1,),check_resignations=False)
+        self.assertEqual(docs[0]['changes'],[])
+        self.assertTrue(docs[0]['notices'])
+        log=[]
+        generate(self.word,self.condos,{str(self.folder):docs},self.root,11,2026,log.append,threading.Event(),
+                 targets=output_targets(self.condos,11,2026),overwrite_sources=True)
+        self.assertEqual(self.word.writes,0);self.assertEqual(self.source.read_bytes(),before)
+        self.assertTrue(any('nenhuma data' in line for line in log))
+
     def test_direct_overwrite_without_any_extra_file_or_folder(self):
         unrelated = self.folder/'contrato.txt'
         unrelated.write_bytes(b'intacto')
@@ -107,3 +120,4 @@ class DirectOutput(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+

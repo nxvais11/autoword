@@ -187,13 +187,13 @@ class Word:
             if doc.Revisions.Count:
                 raise ValueError('Documento contém alterações controladas pendentes. Revisar no Word.')
             # Campos dentro de caixas de texto ou cabeçalhos precisam de revisão específica.
-            from engine import REFERENCE, LONG_DATE
+            from engine import date_baselines
             for story in doc.StoryRanges:
                 if story.StoryType == 1:
                     continue
                 current = story
                 while current is not None:
-                    if REFERENCE.search(current.Text) or LONG_DATE.search(current.Text):
+                    if date_baselines(current.Text):
                         raise ValueError('Há datas em cabeçalho, rodapé ou caixa de texto. Revisão necessária.')
                     current = current.NextStoryRange
             return doc.Content.Text
@@ -261,6 +261,8 @@ def inspect_condo(word, condo, month, year, rules, kinds=(0,1,2,3), sheet_rows=N
         if sheet_rows is not None:
             changes += sheet_changes(text, sheet_rows, sheet_mapping or {}, legacy=kind==0)
         notices=[]
+        if not any(c.kind in ('Data','Competência') for c in changes):
+            notices.append(path.name+': nenhuma data reconhecida; conteúdo de datas mantido.')
         if kind==0:
             changes=combine_changes(changes,removal_changes(text,active_events,changes,notices))
         changes.sort(key=lambda c:c.start)
@@ -345,6 +347,8 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
                 dest = target/d['path'].name
                 if dest.is_symlink() or (dest.exists() and not dest.is_file()):
                     raise ValueError('Destino não é um arquivo regular: '+str(dest))
+                if not d['changes'] and dest.resolve()==d['path'].resolve():
+                    continue  # Sem campos a atualizar: não regrava o original.
                 previous = cache.get(str(dest))
                 if previous and previous[0] == document_signature(d) and dest.is_file() and (automatic or digest(dest) == previous[1]):
                     continue
@@ -406,5 +410,6 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
     if targets:
         return Path(next(iter(targets.values())))
     return output
+
 
 

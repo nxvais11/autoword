@@ -251,3 +251,19 @@ essa consulta, usando um handle de processo; não procura nem encerra o Word do
 usuário. Uma falha anterior à identificação da instância é informada sem encerrar
 processos de Word desconhecidos. O executável instalado testa a criação do
 processo de consulta antes da publicação.
+
+
+## Quantidade variável de datas nos fechamentos
+
+A atualização usa as datas reconhecidas, sem exigir uma quantidade fixa de
+referências por tipo de documento. Aceita competência por extenso com barra,
+hífen ou “de”, competência numérica mês/ano e datas completas por extenso ou
+numéricas com barra/hífen. Todas são normalizadas para a competência escolhida;
+o dia das datas completas passa ao último dia do mês, inclusive em anos bissextos.
+A indicação automática da competência usa os mesmos formatos.
+
+Campos em branco de assinatura, CPF/CNPJ e números isolados são preservados.
+Se nenhum campo de data for reconhecido, isso é informado sem bloquear os outros
+documentos. Um original sem nenhuma alteração solicitada não é regravado.
+Falhas de leitura, de gravação e de conferência dos responsáveis continuam sendo
+tratadas como falhas; não há impressão automática após uma geração malsucedida.

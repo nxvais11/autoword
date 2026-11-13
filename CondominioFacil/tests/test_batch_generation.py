@@ -58,7 +58,11 @@ class BatchGeneration(unittest.TestCase):
         broken.write_text('Campo de competência inválido',encoding='utf-8')
         condos = discover(self.root)
         self.assertEqual(len(condos),70)
-        word = FakeWord()
+        class Reader(FakeWord):
+            def read(self,path):
+                if Path(path)==broken:raise OSError('Falha na leitura do Word')
+                return super().read(path)
+        word = Reader()
         prepared,messages,finished = [],[],[]
         def prepare(service,condo):
             prepared.append(condo['name'])
@@ -163,3 +167,4 @@ class WordLocalSaving(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+

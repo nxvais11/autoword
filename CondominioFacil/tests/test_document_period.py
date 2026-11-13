@@ -12,6 +12,7 @@ class Periods(unittest.TestCase):
     def test_dates_repeated_accent_and_divergence(self):
         self.assertEqual(periods('MARÇO/2026 março / 2026 31 de Março de 2026'),[('marco',2026)])
         self.assertEqual(periods('SETEMBRO/2026 31 de Outubro de 2026'),[('setembro',2026),('outubro',2026)])
+        self.assertEqual(periods('30/09/2026 09/2026 SETEMBRO DE 2026 Setembro-2026'),[('setembro',2026)])
 
     def test_actual_file_not_selected_month_cached_and_invalidated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -61,3 +62,4 @@ class Periods(unittest.TestCase):
             self.assertIn('mudou durante',period_summary(result));self.assertFalse(cache)
             cancel=threading.Event();cancel.set();inspect_periods(result,word_factory=factory,cancel=cancel)
             self.assertIn('cancelada',period_summary(result))
+
