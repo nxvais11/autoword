@@ -1,6 +1,19 @@
 # AutoWord — Condomínio Fácil
 
-Aplicativo Windows para atualizar, individualmente ou em lote, os documentos mensais dos condomínios. Usa Microsoft Word instalado, Python 3.11+ e processamento local. Baixe AutoWord-Setup.exe na Release para instalar o executável e criar o atalho. Não exige Python instalado; Word continua necessário. O ZIP de código permanece disponível para instalações anteriores.
+Aplicativo Windows para preparar os documentos mensais dos condomínios, atualizar os arquivos do Word e enviar o livro à impressão. Os documentos são processados localmente.
+
+**[Baixar AutoWord para Windows](https://github.com/nxvais11/autoword/releases/latest/download/AutoWord-Setup.exe)** · [Ver versões publicadas](https://github.com/nxvais11/autoword/releases)
+
+A instalação pelo executável requer Microsoft Word e dispensa a instalação do Python. Para enviar PDFs à impressora, use Adobe Acrobat ou Reader. O ZIP de código permanece disponível para instalações anteriores.
+
+## Primeiro fechamento
+
+1. Abra o AutoWord e clique em **Configurar AutoWord**. Escolha a pasta de condomínios e, conforme seu fluxo, a pasta de extratos, a de relatórios e as impressoras. **Testar configuração** verifica o acesso às pastas e se o Windows encontra as filas escolhidas.
+2. Selecione o condomínio e a **Competência para atualização**. A Central consulta os arquivos e mostra a competência encontrada nos Words. Ao mudar mês ou ano, a consulta é renovada.
+3. Confira as colunas **Atualizar** e **Imprimir**. Arquivos ausentes ficam visíveis com uma ação para vinculá-los. Se decidir imprimir apenas os disponíveis, a confirmação indica o que ficará de fora.
+4. Execute a atualização ou o envio. Use **Controle mensal → Só pendências** para retomar o trabalho e abra um condomínio com duplo clique. Marque o livro como concluído depois de conferir as folhas.
+
+![Central de fechamento do AutoWord com um condomínio fictício](assets/central.svg)
 
 ## Funcionalidades
 
@@ -9,7 +22,7 @@ Aplicativo Windows para atualizar, individualmente ou em lote, os documentos men
 - Busca em lote na pasta principal, com prévia opcional e validação automática.
 - Planilha de responsáveis com associação de colunas e monitoramento seletivo.
 - Impressão individual de arquivos existentes ou recém-atualizados, sem exigir atualização.
-- Interface simples com controles padrão e paleta clara, sem desenhos personalizados ou animações.
+- Central com documentos agrupados, seleções independentes de atualização e impressão e ações para resolver pendências.
 - Atualização automática do programa pelas Releases públicas deste repositório, sem token no computador.
 
 ## Publicação automática
@@ -96,11 +109,18 @@ A Central é a tela principal. Escolha condomínio e competência uma vez e use:
 - **Só atualizar**: atualiza o fechamento sem enviar nada às impressoras.
 - **Só imprimir**: imprime os arquivos existentes sem alterar mês, dia ou responsáveis.
 
-As caixas da lista escolhem somente a impressão. Em **Opções → Atualização e responsáveis**,
-escolha quais Words atualizar, destino, subpasta AAAA-MM, cadastro manual ou planilha.
-A conferência de alterações é opcional. Uma falha na atualização impede a impressão
-combinada. Uma falha na impressão não desfaz uma atualização já concluída e nunca
-provoca reenvio automático. O destino e os nomes dos documentos são preservados.
+A lista separa as seleções de atualização e impressão. Em **Opções → Atualização
+e responsáveis**, defina os Words marcados por padrão, o destino e o cadastro manual
+ou a planilha. A conferência de alterações é opcional. Ao usar um destino comum,
+a Central e o lote salvam em `destino/Condomínio/AAAA-MM/`. Sem destino comum,
+a atualização usa a pasta original, com subpasta de competência opcional.
+
+Antes de substituir arquivos do fechamento, o AutoWord prepara cópias de recuperação.
+Uma falha durante a gravação tenta reverter as alterações daquele condomínio e impede
+o envio combinado. Se a reversão também falhar, o resumo informa os arquivos que
+precisam de conferência e o caminho das cópias que foram preservadas. Uma falha na
+impressão mantém a atualização já concluída. O programa informa quantos envios a fila
+confirmou e aguarda uma nova ação para repetir.
 
 A ordem é capa, aprovação, anexo I, anexo II e extratos. O relatório de obrigações
 é opcional e usa a outra impressora. A coluna Próxima realização do Word original
@@ -173,7 +193,7 @@ com confirmação incerta exigem confirmação antes de repetir; versões altera
 são consideradas duplicatas. Não há reenvio automático. O registro local não é uma
 garantia da fila nem impede impressões realizadas fora do aplicativo.
 
-Recentes aparecem primeiro na lista de condomínios. O controle e os tempos ficam em
+A lista de condomínios é alfabética. O controle e os tempos ficam em
 livros.json na configuração local do AutoWord, sem relatórios nas pastas da rede.
 Tempo medido é o tempo das operações da Central, incluindo espera durante o envio,
 e não mede exatamente atenção humana ou impressão física. Economia só é estimada

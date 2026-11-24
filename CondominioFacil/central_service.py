@@ -1,12 +1,13 @@
 """Localização determinística, comparação textual e plano da central por condomínio."""
 import difflib
 import json
+import os
 import re
 import unicodedata
 from pathlib import Path
 from word_service import discover,digest,print_layout,document_kind,filename_key,CLOSING_FOLDERS
 
-DEFAULTS={'root':r'Z:\_CONDOMÍNIOS ATIVOS','statements':r'Z:\OFX E EXTRATOS','reports':'',
+DEFAULTS={'root':'','statements':'','reports':'',
           'main_printer':'','report_printer':'','include_report':False,'overrides':{},
           'statement_aliases':{},'update_kinds':[0,1,2,3],'destination':'','create_subfolder':False}
 ORDER=(1,0,2,3)
@@ -73,6 +74,38 @@ def catalog(settings):
         except OSError:
             continue
     return sorted(names,key=norm)
+
+
+def check_workspace(settings, find_printers):
+    checks = []
+    for field, label in [('root','Pasta dos condomínios'), ('statements','Pasta de extratos'),
+                         ('reports','Pasta de relatórios')]:
+        value = settings.get(field, '').strip()
+        if not value:
+            checks.append((label, field != 'root', 'Não configurada'))
+            continue
+        try:
+            with os.scandir(value) as entries:
+                next(entries, None)
+        except OSError as exc:
+            checks.append((label, False, 'Sem acesso: '+str(exc)))
+        else:
+            checks.append((label, True, 'Acesso confirmado'))
+    printer_fields = [('main_printer','Impressora de fechamento'), ('report_printer','Impressora de obrigações')]
+    configured = any(settings.get(field) for field,_ in printer_fields)
+    try:
+        available = find_printers()[0] if configured else ()
+    except Exception:
+        available = ()
+    for field,label in printer_fields:
+        name = settings.get(field, '')
+        if not name:
+            checks.append((label, True, 'Não configurada'))
+        elif name in available:
+            checks.append((label, True, 'Fila encontrada'))
+        else:
+            checks.append((label, False, 'Fila indisponível no Windows'))
+    return checks
 
 def pdf_text(path,first=False):
     from pypdf import PdfReader
@@ -173,7 +206,7 @@ def search(settings,name,month,year,mappings=None,names=None,progress=None,closi
     statements=[]
     if explicit:
         statements=[Path(p) for p in explicit]
-    else:
+    elif settings['statements']:
         folder=Path(settings['statements'])/str(year)/f'{month:02}'
         try:
             progress('Localizando extratos: '+str(folder))
@@ -199,7 +232,7 @@ def search(settings,name,month,year,mappings=None,names=None,progress=None,closi
                         pass
                 if identified==name:statements.append(path)
         except OSError:warnings.append('Extratos: pasta da competência indisponível. Confira o acesso à rede e as pastas em Opções.')
-    if not statements:rows.append({'group':'statement','label':'Extrato não localizado','key':'statements:'+period,'path':None,'checked':True})
+    if not statements:rows.append({'group':'statement','label':'Extrato não localizado','key':'statements:'+period,'path':None,'checked':False})
     for path in statements:rows.append({'group':'statement','label':'Extrato · '+path.name,'key':'statements:'+period,'path':path,'checked':True})
     reports=[];originals=[]
     for key,folder,extensions in [('report_pdf',Path(settings['reports']) if settings['reports'] else None,('.pdf',)),('report_word',home/'JURIDICO',('.doc','.docx'))]:
@@ -222,6 +255,7 @@ def search(settings,name,month,year,mappings=None,names=None,progress=None,closi
         allowed=('.doc','.docx') if row['group']=='closing' else ('.pdf',)
         if path:progress('Validando arquivo: '+str(path))
         if path and (not path.is_file() or path.is_symlink() or path.suffix.lower() not in allowed):row['path']=None
+        if not row['path']:row['checked']=False
         row['printer']=settings['report_printer'] if row['group']=='obligations' else settings['main_printer']
     discarded_bindings={key:old for key,old in discarded_bindings.items() if any(r['key']==key and r['path'] for r in rows)}
     return {'name':name,'period':period,'rows':rows,'word':originals[0] if len(originals)==1 else None,'warnings':warnings,'closing_folder':condo['folder'] if condo else str(home),'closing_found':condo.get('found',[]) if condo else [],'discarded_closing_bindings':discarded_bindings}

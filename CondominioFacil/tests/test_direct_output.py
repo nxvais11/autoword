@@ -1,10 +1,12 @@
 import base64
 import json
+import os
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from engine import FILES
 from word_service import discover, inspect_condo, generate, output_targets
@@ -104,6 +106,54 @@ class DirectOutput(unittest.TestCase):
         self.assertEqual(self.source.read_bytes(),original)
         self.assertEqual(self.models,{})
         self.assertFalse(list(self.root.rglob('.temporario_*')))
+    def test_separate_runs_keep_same_named_documents_in_distinct_destinations(self):
+        other=self.root/'B'
+        other.mkdir()
+        (other/self.source.name).write_text('AGOSTO/2026 — B',encoding='utf-8')
+        destination=self.root/'saida'
+        for folder in (self.folder,other):
+            condos=discover(folder)
+            docs=inspect_condo(self.word,condos[0],11,2026,[],(1,),check_resignations=False)
+            targets=output_targets(condos,11,2026,destination)
+            generate(self.word,condos,{str(folder):docs},self.root,11,2026,lambda text:None,
+                     threading.Event(),targets=targets)
+        first=destination/'A'/'2026-11'/self.source.name
+        second=destination/'B'/'2026-11'/self.source.name
+        self.assertIn('NOVEMBRO/2026',first.read_text(encoding='utf-8'))
+        self.assertEqual(second.read_text(encoding='utf-8'),'NOVEMBRO/2026 — B')
+
+    def test_second_replace_failure_rolls_back_or_retains_recovery(self):
+        annex=self.folder/(FILES[2]+'.doc')
+        originals={p:p.read_bytes() for p in (self.source,annex)}
+        real_replace=os.replace
+        for restore_blocked in (False,True):
+            with self.subTest(restore_blocked=restore_blocked):
+                calls=[]
+                def replace(source,destination):
+                    calls.append(destination)
+                    if destination==annex or (restore_blocked and len(calls)==3):
+                        raise PermissionError('arquivo em uso')
+                    return real_replace(source,destination)
+                docs=inspect_condo(self.word,self.condos[0],11,2026,[],(1,2),check_resignations=False)
+                messages=[]
+                with patch('word_service.os.replace',side_effect=replace):
+                    generate(self.word,self.condos,{str(self.folder):docs},self.root,11,2026,messages.append,
+                             threading.Event(),targets=output_targets(self.condos,11,2026),
+                             overwrite_sources=True,cache=self.cache,models=self.models)
+                self.assertEqual(annex.read_bytes(),originals[annex])
+                self.assertEqual(self.cache,{})
+                self.assertEqual(self.models,{})
+                if restore_blocked:
+                    self.assertIn('1 documento(s) gravado(s)',messages[-1])
+                    recovery=next(self.root.rglob('recuperacao'))
+                    self.assertEqual((recovery/self.source.name).read_bytes(),originals[self.source])
+                    self.assertTrue((recovery/'restaurar.json').is_file())
+                    self.assertIn(str(recovery),messages[0])
+                else:
+                    self.assertIn('Publicação revertida',messages[0])
+                    self.assertEqual(self.source.read_bytes(),originals[self.source])
+                    self.assertFalse(list(self.root.rglob('.temporario_*')))
+
     def test_manual_edit_invalidates_saved_model(self):
         self.update()
         self.source.write_text('NOVEMBRO/2026 Texto editado no Word',encoding='utf-8')

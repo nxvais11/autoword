@@ -57,6 +57,13 @@ class ConsoleMessages(unittest.TestCase):
         self.assertNotIn('fila 123',value['summary'])
         self.assertIn('fila 123',value['details'])
 
+    def test_zero_confirmations_without_exception_are_reported_as_pending(self):
+        row=dict(key='closing1',hash='abc',label='Capa')
+        tracking=dict(name='ALFA',period='2026-09',sent=[],planned=[row],words=0)
+        summary=operation_message(tracking,1,'','0/1 documento(s) enviado(s).')['summary']
+        self.assertIn('Nenhum envio confirmado',summary)
+        self.assertNotIn('Operação concluída',summary)
+
     def test_preview_groups_repeated_changes_without_discarding_names_or_dates(self):
         change=Change(0,1,'AGOSTO/2026','SETEMBRO/2026','Competência')
         responsible=Change(1,2,'Nome anterior','Nome novo','Responsável')

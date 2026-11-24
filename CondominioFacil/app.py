@@ -30,7 +30,7 @@ class App(tk.Tk):
         icon = Path(__file__).with_name('autoword.ico')
         if icon.exists():
             self.iconbitmap(str(icon))
-        self.title(f'Condomínio Fácil — atualização de documentos • versão {VERSION}')
+        self.title(f'AutoWord — Condomínio Fácil • versão {VERSION}')
         height = min(820,self.winfo_screenheight()-100)
         self.geometry(f'{min(1180,self.winfo_screenwidth()-40)}x{height}')
         self.minsize(900,min(650,height))
@@ -236,10 +236,10 @@ class App(tk.Tk):
         self.selection_summary.set(f'Condomínios · {len(self.tree.selection())} de {len(self.condos)} selecionados')
 
     def update_destination_hint(self, *args):
-        if self.create_subfolder.get():
+        if self.destination.get().strip():
+            text = 'Substitui somente os documentos escolhidos em destino / condomínio / AAAA-MM.'
+        elif self.create_subfolder.get():
             text = 'Salva em uma subpasta AAAA-MM no destino de cada condomínio.'
-        elif self.destination.get().strip():
-            text = 'Substitui somente os documentos escolhidos na pasta de destino.'
         else:
             text = 'Destino vazio: atualiza os documentos na própria pasta de cada condomínio.'
         self.destination_hint.set(text)
@@ -323,7 +323,7 @@ class App(tk.Tk):
                 self.log('  Use “Opções → Selecionar os 4 arquivos…” para indicar os nomes diferentes.')
         self.select_all()
         self.selection_changed()
-        self.destination.set(condos[0]['folder'] if len(condos)==1 else '')
+        self.destination.set('')
         self.status.set(f'{len(condos)} condomínio(s) encontrado(s). Selecione para atualizar ou imprimir os arquivos existentes.')
         self.last_jobs = {}
         for condo in condos:
@@ -705,7 +705,7 @@ class App(tk.Tk):
         try:
             month, year = self.period()
             root = Path(self.folder.get()).resolve()
-            dest = self.destination.get() or None
+            dest = self.destination.get().strip() or None
             targets = output_targets(condos,month,year,dest,self.create_subfolder.get())
             kinds = self.chosen_kinds()
             if not kinds:

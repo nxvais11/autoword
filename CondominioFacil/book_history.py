@@ -96,6 +96,9 @@ class BookHistory:
         self._atomic(self.backup,text)
     def get(self,root,name,period):
         with self._access():return copy.deepcopy(self.data['books'].get(self._key(root,name,period),{}))
+    def month(self,root,names,period):
+        with self._access():
+            return {name:copy.deepcopy(self.data['books'].get(self._key(root,name,period),{})) for name in names}
     def touch(self,root,name):
         with self._access():
             key=self._root(root);recent=self.data['recent'].get(key,[])
@@ -160,8 +163,8 @@ class BookHistory:
         if any(v['state']=='sent' for v in book.get('sent',{}).values()):return 'Enviado à impressão'
         if book.get('updated'):return 'Atualizado'
         return 'Pendente'
-    def totals(self,root,names,period):
-        books=[self.get(root,name,period) for name in names]
+    def totals(self,root,names,period,*,snapshot=None):
+        books=(self.month(root,names,period) if snapshot is None else snapshot).values()
         complete=[b for b in books if b.get('complete')]
         seconds=sum(b.get('seconds',0) for b in books)
         eligible=[b for b in complete if b.get('operations') and (b.get('updated') or any(v['state']=='sent' for v in b.get('sent',{}).values()))]

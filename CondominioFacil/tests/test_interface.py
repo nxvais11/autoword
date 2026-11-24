@@ -229,7 +229,9 @@ class Interface(unittest.TestCase):
         from central_service import DEFAULTS
         path=Path(self.tmp.name)/'central.json'
         save_settings(path,dict(DEFAULTS,root=self.tmp.name))
-        rows=[dict(group=group,label=group,key=group,path=None,checked=group!='obligations',printer='TEST') for group in ('closing','statement','statement','obligations')]
+        rows=[dict(group=group,label=group,key=key,path=Path(key),checked=group!='obligations',printer='TEST')
+              for group,key in [('closing','closing1'),('statement','extrato 1'),('statement','extrato 2'),('obligations','relatório')]]
+        rows.append(dict(group='statement',label='Extrato não localizado',key='ausente',path=None,checked=True,printer='TEST'))
         result=dict(name='CONDOMINIO TESTE',period='2026-09',rows=rows,word=None,warnings=[])
         def wait(window):
             until=time.monotonic()+5
@@ -254,9 +256,15 @@ class Interface(unittest.TestCase):
             window.toggle(index=1)
             window.toggle(index=3);self.assertEqual(window.checked,{0,1,2,3})
             window.clear_all_button.invoke();self.assertEqual(window.checked,set())
-            self.assertTrue(all(window.tree.set(i,'check')=='☐' for i in window.tree.get_children()))
+            self.assertTrue(all(window.tree.set(str(i),'check')=='☐' for i in range(5)))
             window.select_all_button.invoke();self.assertEqual(window.checked,{0,1,2,3})
-            self.assertTrue(all(window.tree.set(i,'check')=='☑' for i in window.tree.get_children()))
+            self.assertTrue(all(window.tree.set(str(i),'check')=='☑' for i in range(4)))
+            self.assertEqual(window.tree.set('4','state'),'Arquivo ausente')
+            self.assertEqual(window.tree.set('4','action'),'Vincular extrato')
+            self.assertEqual(window.tree.set('4','check'),'☐')
+            window.toggle(index=0,update=True)
+            self.assertEqual(window.tree.set('0','update'),'☐')
+            self.assertEqual(window.tree.set('0','check'),'☑')
             self.assertEqual(window.tree.selection(),('1',))
             window.toggle(index=3);self.assertEqual(window.checked,{0,1,2})
             window.busy=True;window.check_all(False);self.assertEqual(window.checked,{0,1,2})
@@ -310,6 +318,44 @@ class Interface(unittest.TestCase):
             self.app.open_central();self.wait_central(panel)
             self.assertIs(panel,self.app.central_panel)
             panel.month.set('Dezembro');self.assertIsNone(panel.result)
+
+    def test_first_use_checks_the_selected_folder_before_saving(self):
+        import time
+        from tkinter import ttk
+        from central_ui import load_settings
+        self.app.open_central()
+        panel=self.app.central_panel
+        self.app.update()
+        self.assertTrue(panel.setup_button.winfo_ismapped())
+        def widgets(parent):
+            for child in parent.winfo_children():
+                yield child
+                yield from widgets(child)
+        with patch('central_ui.available_printers',return_value=([],'')):
+            panel.setup_button.invoke()
+            dialog=next(w for w in panel.winfo_children() if isinstance(w,tk.Toplevel))
+            entry=next(w for w in widgets(dialog) if isinstance(w,ttk.Entry))
+            entry.insert(0,self.tmp.name)
+            next(w for w in widgets(dialog) if isinstance(w,ttk.Button) and w.cget('text')=='Salvar').invoke()
+            until=time.monotonic()+5
+            while dialog.winfo_exists() and time.monotonic()<until:
+                self.app.update();time.sleep(.01)
+        self.assertFalse(dialog.winfo_exists())
+        self.wait_central(panel)
+        self.assertFalse(panel.setup_button.winfo_ismapped())
+        self.assertEqual(load_settings(panel.path)['root'],self.tmp.name)
+
+    def test_month_change_searches_automatically_with_valid_year(self):
+        import time
+        panel,folder=self.workspace_fixture()
+        panel.name.set('TESTE');panel.month.set('Novembro');panel.year.set('2026')
+        panel.query();self.wait_central(panel)
+        panel.month.set('Dezembro')
+        until=time.monotonic()+5
+        while (panel.busy or not panel.result) and time.monotonic()<until:
+            self.app.update();time.sleep(.01)
+        self.assertEqual(panel.result['period'],'2026-12')
+        self.assertIn('Imprimir 4 disponíveis',panel.print_button.cget('text'))
 
     def test_combined_action_updates_before_print_without_preview_gate_and_only_print_does_not_update(self):
         from test_central_update import Session
@@ -417,7 +463,7 @@ class Interface(unittest.TestCase):
         self.assertTrue(all(str(c.cget('state'))=='disabled' for c in panel.controls))
         self.app.busy=False;panel.poll()
         self.assertEqual(str(panel.names.cget('state')),'normal')
-        self.assertEqual(str(panel.print_button.cget('state')),'normal')
+        self.assertEqual(str(panel.print_button.cget('state')),'disabled')
 
     def test_history_summary_duplicate_confirmation_and_monthly_manual_completion(self):
         from tkinter import ttk
@@ -448,6 +494,9 @@ class Interface(unittest.TestCase):
             with patch('central_ui.messagebox.askyesno',return_value=True):button.invoke()
             self.assertEqual(panel.book_status.get(),'Concluído')
             self.assertEqual(tree.set('0','status'),'Concluído')
+            pending=next(w for w in walk(dialog) if isinstance(w,ttk.Checkbutton) and w.cget('text')=='Só pendências')
+            pending.invoke();self.assertEqual(tree.get_children(),())
+            pending.invoke();self.assertEqual(tree.get_children(),('0',))
             restore=next(w for w in walk(dialog) if isinstance(w,ttk.Button) and w.cget('text')=='Restaurar controle')
             before=panel.history.path.read_bytes()
             restore.invoke();self.app.update()

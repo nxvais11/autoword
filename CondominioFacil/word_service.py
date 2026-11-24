@@ -1,6 +1,7 @@
 """Word COM em uma instância exclusiva. Os originais são abertos somente para leitura."""
 import hashlib
 import base64
+import json
 import os
 import re
 import shutil
@@ -304,13 +305,77 @@ def document_signature(doc):
 def output_targets(condos, month, year, destination=None, create_subfolder=False):
     result = {}
     for condo in condos:
-        folder = Path(destination).resolve() if destination else Path(condo['folder']).resolve()
-        if destination and len(condos)>1:
-            folder = folder/condo['name']
-        result[condo['folder']] = folder/f'{year}-{month:02}' if create_subfolder else folder
+        if destination:
+            folder = Path(destination).resolve() / condo['name']
+        else:
+            folder = Path(condo['folder']).resolve()
+        result[condo['folder']] = folder/f'{year}-{month:02}' if destination or create_subfolder else folder
     if len({str(p).casefold() for p in result.values()}) != len(result):
         raise ValueError('Dois condomínios apontam para a mesma pasta de saída.')
     return result
+
+class PublishError(OSError):
+    def __init__(self, cause, remaining, recovery):
+        self.remaining = remaining
+        self.recovery = recovery
+        message = f'Falha ao gravar {cause}'
+        if remaining:
+            message += '\nArquivos a conferir: '+', '.join(path.name for path in remaining)
+            message += f'\nCópias de recuperação: {recovery}'
+        else:
+            message += '\nPublicação revertida. Os arquivos anteriores foram preservados.'
+        super().__init__(message)
+
+
+def publish_documents(stage, target, docs):
+    recovery = stage/'recuperacao'
+    recovery.mkdir()
+    entries = []
+    names = [doc['path'].name for doc in docs]
+    if len({name.casefold() for name in names}) != len(names):
+        raise ValueError('Dois documentos têm o mesmo nome de saída.')
+    for name in names:
+        destination = target/name
+        if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+            raise ValueError('Destino não é um arquivo regular: '+str(destination))
+        backup = recovery/name
+        before = None
+        if destination.is_file():
+            shutil.copy2(destination, backup)
+            before = digest(backup)
+        entries.append((destination, before, digest(stage/name)))
+    for doc,(destination,before,_) in zip(docs,entries):
+        if destination.resolve()==doc['path'].resolve() and before!=doc['hash']:
+            raise ValueError('Original mudou antes da publicação: '+destination.name)
+    metadata = [{'destino':str(path),'copia':path.name if before else None,
+                 'sha256_anterior':before,'sha256_novo':after} for path,before,after in entries]
+    (recovery/'restaurar.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
+
+    published = []
+    try:
+        for destination, before, after in entries:
+            if destination.is_symlink() or (digest(destination) if destination.exists() else None) != before:
+                raise ValueError('o destino mudou durante a gravação')
+            os.replace(stage/destination.name, destination)
+            published.append((destination, before, after))
+    except Exception as exc:
+        remaining = []
+        failed = destination
+        for destination, before, after in reversed(published):
+            try:
+                if destination.is_symlink() or digest(destination) != after:
+                    raise ValueError('o destino mudou depois da gravação')
+                if before is None:
+                    destination.unlink()
+                else:
+                    restore = stage/destination.name
+                    shutil.copy2(recovery/destination.name, restore)
+                    os.replace(restore, destination)
+            except (OSError, ValueError):
+                remaining.append(destination)
+        raise PublishError(f'{failed.name}: {exc}', remaining, recovery) from exc
+    return {path:after for path,_,after in entries}
+
 
 def generate(word, condos, preview, output_parent, month, year, log, cancel,
              existing_folder=None, targets=None, cache=None, on_generated=None, validate=None, automatic=False,
@@ -318,7 +383,7 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
     """Gera somente os documentos selecionados. Nenhum relatório é gravado.
 
     targets reutiliza destinos já gerados; cache evita regravar resultados iguais.
-    Uma cópia temporária por documento alterado protege o destino até o Word salvar.
+    Prepara os documentos e as cópias de recuperação antes de publicar o conjunto.
     """
     if existing_folder is not None and len(condos) != 1:
         raise ValueError('Escolha apenas um condomínio para salvar na pasta existente selecionada.')
@@ -335,6 +400,7 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
             log(f"{condo['name']}: CANCELADO — não processado.")
             continue
         stage = None
+        retain_recovery = False
         created_dirs = []
         try:
             if progress:
@@ -395,28 +461,37 @@ def generate(word, condos, preview, output_parent, month, year, log, cancel,
                     validate()
                 for d in docs:
                     validate_events(d.get('resignation_events',[]),month,year)
+                if cancel.is_set():
+                    canceled += 1
+                    log(f"{condo['name']}: CANCELADO — arquivos anteriores preservados.")
+                    continue
                 parent = target
                 while not parent.exists():
                     created_dirs.append(parent)
                     parent = parent.parent
                 target.mkdir(parents=True, exist_ok=True)
+                published = publish_documents(stage,target,pending)
+                written += len(published)
                 for d in pending:
                     dest = target/d['path'].name
-                    os.replace(stage/d['path'].name, dest)
-                    written_hash = digest(dest)
+                    written_hash = published[dest]
                     cache[str(dest)] = document_signature(d), written_hash
                     if str(d['path']) in snapshots:
                         models[str(d['path'])] = dict(snapshots[str(d['path'])],current_hash=written_hash)
             if on_generated:
                 on_generated(condo, target, docs)
             completed += 1
-            written += len(pending)
             log(f"{condo['name']}: {len(pending)} documento(s) gerado(s); {len(docs)-len(pending)} sem mudança.")
+        except PublishError as exc:
+            retain_recovery = bool(exc.remaining)
+            written += len(exc.remaining)
+            reviewed += 1
+            log(f"{condo['name']}: REVISAR — {exc}")
         except Exception as exc:
             reviewed += 1
             log(f"{condo['name']}: REVISAR — {exc}")
         finally:
-            if stage is not None:
+            if stage is not None and not retain_recovery:
                 shutil.rmtree(stage, ignore_errors=True)
             for directory in created_dirs:
                 try:

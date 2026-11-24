@@ -1,21 +1,23 @@
 # Central de impressão por condomínio
 
-Abra **Central de impressão** na tela inicial. Em **Configurações** (também em
-Opções → Central: pastas e impressoras), confira os caminhos de condomínios,
-extratos e PDFs pessoais de obrigações. Os caminhos gerais da rede são sugeridos;
-a pasta pessoal é escolhida uma vez. Selecione a HP para fechamento/extratos e a
-Epson para obrigações. As configurações ficam em central.json no cadastro local.
+O AutoWord abre na **Central de fechamento**. No primeiro uso, clique em
+**Configurar AutoWord** e indique a pasta dos condomínios. Se usar extratos,
+relatórios pessoais ou impressão, configure também suas pastas e filas.
+**Testar configuração** verifica o acesso às pastas e as filas do Windows.
+Para ajustar depois, abra **Opções → Pastas e impressoras**.
+As configurações ficam em central.json no cadastro local.
 
-Escolha o nome do condomínio e a competência e clique em **Buscar arquivos**.
-Extratos vêm de ano/mês; nomes compostos são associados por palavras completas.
-Arquivos com nome genérico são conferidos pelo cabeçalho textual do PDF. Arquivos
-sem identificação segura não são associados por suposição. Use Vincular arquivo
-para corrigir casos especiais; vínculos de extrato valem só para aquela competência.
-O Word é procurado diretamente no Jurídico, sem subpastas. Mais de um candidato
-exige vinculação explícita. Não há filtro de competência para obrigações.
+Escolha o condomínio e a competência. A Central busca automaticamente ao mudar
+a competência. Use **Buscar arquivos** para repetir a consulta manualmente.
+Os extratos são procurados em ano/mês, pelo nome do PDF ou pelo cabeçalho da
+primeira página. Para exceções, use **Vincular extrato** na linha. Esse vínculo
+vale para o condomínio e a competência selecionados. A Central procura o Word
+do relatório na pasta Jurídico e sinaliza candidatos ambíguos.
 
-Todos os extratos identificados ficam marcados. Use Selecionar todos, Desmarcar todos ou clique na primeira coluna para escolher. Obrigações são opcionais,
-inicialmente desmarcadas, com preferência editável nas configurações.
+Use as colunas **Atualizar** e **Imprimir** separadamente. **Marcar disponíveis**
+marca para impressão os arquivos encontrados. Arquivos ausentes ficam pendentes
+e aparecem na confirmação se você enviar os demais. Relatórios de obrigações
+são opcionais e exigem conferência antes do envio.
 
 Compare obrigações antes de imprimir o relatório. O Word é aberto somente para
 leitura e exportado temporariamente para PDF. A comparação considera o texto de
@@ -52,10 +54,10 @@ A instalação é por usuário, sem exigir administrador, em
 `%LOCALAPPDATA%\Programs\AutoWord`. O ícone identifica documento conferido.
 A interface permanece simples, com a paleta clara e controles padrão.
 
-O executável verifica novas Releases em segundo plano. Depois de baixar e
-verificar o SHA-256 do instalador, avisa na tela. Feche o AutoWord para instalar
-e reabrir automaticamente. O processo aguarda o programa encerrar para substituir
-os arquivos. Sem internet, a versão instalada continua funcionando.
+O executável verifica novas versões em segundo plano e apresenta um aviso.
+Clique em **Atualizar e reiniciar** para baixar e verificar o instalador. O AutoWord
+aguarda as operações em andamento e reinicia após a instalação. Sem internet,
+a versão instalada continua funcionando.
 
 Configurações e cadastros continuam em `%LOCALAPPDATA%\CondominioFacil`; o
 instalador não apaga essa pasta nem altera os documentos dos condomínios.
@@ -74,18 +76,18 @@ Aplicativo local para Windows, Python 3.11 ou superior e Microsoft Word instalad
 ## Uso diário
 
 1. Selecione a pasta dos condomínios ou diretamente a pasta com os arquivos Word.
-2. Confira **Salvar em**. Ao escolher um único condomínio, o programa preenche sua pasta. Em lote, deixar o destino vazio usa a própria pasta de cada condomínio. Você pode selecionar ou digitar outra pasta.
+2. Confira **Salvar em**. Deixar o destino vazio usa a própria pasta de cada condomínio. Um destino comum separa os arquivos em `destino/Condomínio/AAAA-MM/`. Você pode selecionar ou digitar a pasta.
 3. Escolha mês e ano.
-4. Deixe **Criar subpasta (AAAA-MM)** desmarcado para substituir os documentos existentes diretamente no destino, com os mesmos nomes. Marque apenas se quiser salvar dentro de uma subpasta como `2026-11`.
+4. Ao usar as pastas originais, marque **Criar subpasta (AAAA-MM)** para salvar cópias por competência. Com a opção desmarcada, o AutoWord atualiza os arquivos selecionados na própria pasta.
 5. Clique diretamente em **Atualizar documentos**. Se quiser ver a prévia antes, use **Conferir alterações (opcional)**. As validações são executadas automaticamente na geração.
 
-Somente os documentos selecionados são substituídos. Outros arquivos são mantidos, inclusive os documentos que você não selecionou. Não são criados lotes com data/hora, relatórios nem cópias adicionais na pasta do condomínio. Se um arquivo ainda não existir no destino, ele é criado com o nome do documento de origem.
+Somente os documentos selecionados são substituídos. Outros arquivos são mantidos, inclusive os documentos que você não selecionou. São preparadas cópias temporárias para reverter falhas de gravação. Se a reversão falhar, o AutoWord preserva as cópias e mostra sua localização. Uma atualização concluída preserva a estrutura das pastas. Se um arquivo ainda não existir no destino, ele é criado com o nome do documento de origem.
 
 Quando vários condomínios estiverem selecionados e você indicar outra pasta de destino, cada condomínio terá sua própria pasta de mesmo nome dentro dela, evitando colisões entre documentos. Com destino vazio, cada um é atualizado em sua própria pasta; a opção de subpasta continua sendo aplicada individualmente.
 
 ## Reconhecimento de nomes dos documentos
 
-Os nomes completos anteriores continuam aceitos. A versão 0.4.1 também identifica automaticamente:
+Os nomes completos anteriores continuam aceitos. O AutoWord também identifica automaticamente:
 
 | Tipo | Exemplos de nomes aceitos |
 | --- | --- |
