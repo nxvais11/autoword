@@ -3,7 +3,8 @@ from tkinter import font, ttk
 
 COLORS = dict(bg='#F3F5F7', panel='#FFFFFF', field='#FFFFFF',
               text='#243447', muted='#586B7D', accent='#365F7D',
-              border='#DCE3EA', selected='#E3EDF5')
+              border='#DCE3EA', selected='#E3EDF5', section='#E7EEF5',
+              alternate='#F6F8FA', attention='#8A471F')
 
 def apply_theme(root):
     if hasattr(root, '_autoword_style'):
