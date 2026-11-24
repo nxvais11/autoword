@@ -39,7 +39,7 @@ def search_message(result,selected):
            f'Extratos: {len(statements)} localizado(s).',
            'Obrigações: selecionadas para impressão.' if report_selected else 'Obrigações: fora da impressão.']
     attention=[]
-    missing=[r['label'] for i,r in enumerate(rows) if not r.get('path') and (r['group']=='closing' or i in selected)]
+    missing=[r['label'] for i,r in enumerate(rows) if not r.get('path') and (r['group'] in ('closing','statement') or i in selected)]
     if missing:attention.append('Vincule os arquivos ausentes: '+', '.join(dict.fromkeys(missing))+'.')
     if any(not r.get('printer') for i,r in enumerate(rows) if i in selected):
         attention.append('Configure a impressora dos documentos selecionados em Opções.')
@@ -91,6 +91,7 @@ def operation_message(tracking,seconds,error,result):
     lines=[f"{tracking['name']} · {tracking['period'][5:]}/{tracking['period'][:4]}"]
     if error:lines.append('Operação não concluída: '+error.splitlines()[0])
     elif result and 'cancelad' in str(result).casefold():lines.append('Operação cancelada.')
+    elif pending:lines.append('Envio parcial. Confira os documentos pendentes.' if sent else 'Nenhum envio confirmado. Confira a fila antes de tentar novamente.')
     else:lines.append('Operação concluída.')
     if tracking['words']:lines.append(f"Documentos verificados/atualizados: {tracking['words']}.")
     if tracking['planned']:
