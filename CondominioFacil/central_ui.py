@@ -20,7 +20,8 @@ from book_history import BookHistory,file_id
 from document_period import inspect_periods,period_summary
 from console_messages import search_message,operation_message,preview_message,message
 from workspace_cache import load_cache,save_cache,cache_key
-from central_service import alphabetical_names,matching_names,norm
+from central_service import alphabetical_names,matching_names,norm,check_workspace
+from theme import COLORS
 
 
 def load_settings(path):
@@ -37,12 +38,18 @@ def save_settings(path,value):
     tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8');os.replace(tmp,path)
 
 
-def settings_dialog(parent,path,on_saved=None):
+def settings_dialog(parent,path,on_saved=None,*,setup=False):
     try:settings=load_settings(path)
     except Exception as exc:messagebox.showerror('Opções',str(exc),parent=parent);return
-    dialog=tk.Toplevel(parent);dialog.title('AutoWord — opções');dialog.transient(parent.winfo_toplevel());dialog.grab_set()
+    dialog=tk.Toplevel(parent)
+    dialog.title('Configurar AutoWord' if setup else 'AutoWord — opções')
+    dialog.transient(parent.winfo_toplevel());dialog.grab_set()
     dialog.geometry(f'760x{min(650,dialog.winfo_screenheight()-100)}')
     shell=ttk.Frame(dialog,padding=16);shell.pack(fill='both',expand=True)
+    if setup:
+        ttk.Label(shell,text='Configuração inicial',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(shell,text='Escolha a pasta dos condomínios. Adicione extratos, relatórios e impressoras conforme o seu fluxo.',
+                  style='Muted.TLabel',wraplength=680).pack(anchor='w',pady=(3,12))
     tabs=ttk.Notebook(shell);tabs.pack(fill='both',expand=True)
     paths=ttk.Frame(tabs,padding=12);update=ttk.Frame(tabs,padding=12)
     tabs.add(paths,text='Pastas e impressoras');tabs.add(update,text='Atualização e responsáveis')
@@ -107,7 +114,7 @@ def settings_dialog(parent,path,on_saved=None):
     dialog.bind('<Destroy>',release_refresh,add='+')
     dialog.refresh_button=refresh_button
     values={}
-    for field,label in [('root','Pasta principal dos condomínios'),('statements','Extratos (pasta acima dos anos)'),('reports','PDFs pessoais de obrigações'),('destination','Salvar Words em (vazio: pasta original)')]:
+    for field,label in [('root','Pasta principal dos condomínios'),('statements','Extratos (opcional, pasta acima dos anos)'),('reports','PDFs pessoais de obrigações (opcional)'),('destination','Pasta de saída (opcional, organiza por condomínio e competência)')]:
         host=update if field=='destination' else paths
         ttk.Label(host,text=label).pack(anchor='w',pady=(8,3));row=ttk.Frame(host);row.pack(fill='x')
         value=tk.StringVar(value=settings.get(field,''));values[field]=value
@@ -131,20 +138,19 @@ def settings_dialog(parent,path,on_saved=None):
         try:
             names=errors.get_nowait()
             for combo in combos:combo.configure(values=names)
-            for field,needle in [('main_printer','e50145'),('report_printer','l3150')]:
-                if not values[field].get():values[field].set(next((n for n in names if needle in n.casefold()),''))
         except queue.Empty:dialog.after(100,poll)
     dialog.after(100,poll)
     include=tk.BooleanVar(value=settings['include_report'])
     ttk.Checkbutton(paths,text='Marcar obrigações para impressão por padrão',variable=include).pack(anchor='w',pady=12)
-    ttk.Label(paths,text='Uma cópia, somente frente. PDFs usam o Adobe e as preferências da impressora.\nOrdem: capa, aprovação, anexo I, anexo II e extratos. Obrigações na outra impressora.',wraplength=650).pack(anchor='w')
+    ttk.Label(paths,text='Escolha as impressoras para habilitar o envio. PDFs usam o Adobe e as preferências da impressora.',
+              style='Muted.TLabel',wraplength=650).pack(anchor='w')
     ttk.Label(update,text='Words a atualizar',style='Section.TLabel').pack(anchor='w',pady=(14,5))
     choices=ttk.Frame(update);choices.pack(fill='x')
     kinds=[tk.BooleanVar(value=k in settings.get('update_kinds',range(4))) for k in range(4)]
     for k,label in enumerate(('Aprovação','Capa','Anexo I','Anexo II')):
         ttk.Checkbutton(choices,text=label,variable=kinds[k]).pack(side='left',padx=5)
     subfolder=tk.BooleanVar(value=settings.get('create_subfolder',False))
-    ttk.Checkbutton(update,text='Criar subpasta AAAA-MM para os Words',variable=subfolder).pack(anchor='w',pady=12)
+    ttk.Checkbutton(update,text='Criar subpasta AAAA-MM ao salvar na pasta original',variable=subfolder).pack(anchor='w',pady=12)
     owner=getattr(parent,'parent',parent)
     def dismiss():
         dialog.destroy()
@@ -156,17 +162,67 @@ def settings_dialog(parent,path,on_saved=None):
     ttk.Button(actions,text='Importar planilha de responsáveis…',command=lambda:call(owner.import_sheet)).pack(anchor='w',pady=4)
     ttk.Button(actions,text='Desvincular planilha',command=lambda:call(owner.unlink_sheet)).pack(anchor='w',pady=4)
     ttk.Label(update,textvariable=owner.sheet_status,wraplength=650).pack(anchor='w')
-    def save():
+    def candidate():
+        store_aliases()
+        validate_statement_aliases(aliases,alias_names)
+        return dict(settings,**{k:v.get().strip() for k,v in values.items()},statement_aliases=aliases,
+                    include_report=include.get(),update_kinds=[k for k,v in enumerate(kinds) if v.get()],
+                    create_subfolder=subfolder.get())
+
+    def persist(updated):
         try:
-            store_aliases();validate_statement_aliases(aliases,alias_names)
-            updated=dict(settings,**{k:v.get().strip() for k,v in values.items()},statement_aliases=aliases,include_report=include.get(),
-                         update_kinds=[k for k,v in enumerate(kinds) if v.get()],create_subfolder=subfolder.get())
-            if not updated['root'] or not updated['statements']:raise ValueError('Informe as pastas principais de condomínios e extratos.')
-            save_settings(path,updated);dismiss()
-            if on_saved:on_saved()
-        except Exception as exc:messagebox.showerror('Opções não salvas',str(exc),parent=dialog)
+            if not updated['root']:raise ValueError('Informe a pasta principal dos condomínios.')
+            save_settings(path,updated)
+        except Exception as exc:
+            messagebox.showerror('Opções não salvas',str(exc),parent=dialog)
+            return
+        dismiss()
+        if on_saved:on_saved()
+
+    def verify(save_after=False):
+        try:updated=candidate()
+        except ValueError as exc:
+            messagebox.showerror('Configuração',str(exc),parent=dialog);return
+        mailbox=queue.Queue()
+        verify_button.configure(state='disabled')
+        save_button.configure(state='disabled')
+        check_status.set('Verificando acesso às pastas e filas de impressão…')
+        threading.Thread(target=lambda:mailbox.put(check_workspace(updated,available_printers)),daemon=True).start()
+
+        def show_checks():
+            if not dialog.winfo_exists():return
+            try:checks=mailbox.get_nowait()
+            except queue.Empty:
+                dialog.after(100,show_checks)
+                return
+            verify_button.configure(state='normal')
+            save_button.configure(state='normal')
+            if any(updated[k]!=v.get().strip() for k,v in values.items()):
+                check_status.set('Os campos mudaram. Verifique a configuração atual.')
+                return
+            errors=[label for label,ok,_ in checks if not ok]
+            check_status.set('Revise: '+', '.join(errors)+'.' if errors else 'Acesso confirmado para os itens configurados.')
+            if save_after and not errors:
+                save()
+            else:
+                text='\n'.join(f'{label} · {note}' for label,_,note in checks)
+                notice=messagebox.showwarning if errors else messagebox.showinfo
+                notice('Verificação da configuração',text,parent=dialog)
+        dialog.after(100,show_checks)
+
+    def save():
+        try:updated=candidate()
+        except ValueError as exc:
+            messagebox.showerror('Opções não salvas',str(exc),parent=dialog);return
+        persist(updated)
+
     footer=ttk.Frame(shell);footer.pack(fill='x',pady=(12,0))
-    ttk.Button(footer,text='Salvar',style='Primary.TButton',command=save).pack(side='right')
+    check_status=tk.StringVar()
+    ttk.Label(shell,textvariable=check_status,style='Muted.TLabel',wraplength=680).pack(anchor='w',pady=(5,0))
+    verify_button=ttk.Button(footer,text='Testar configuração',command=verify)
+    verify_button.pack(side='left')
+    save_button=ttk.Button(footer,text='Salvar',style='Primary.TButton',command=lambda:verify(True) if setup else save())
+    save_button.pack(side='right')
     ttk.Button(footer,text='Cancelar',command=dismiss).pack(side='right',padx=8)
     dialog.protocol('WM_DELETE_WINDOW',dismiss)
     return dialog
@@ -189,76 +245,120 @@ class CentralView:
             self.title('AutoWord — atualizar e imprimir');self.geometry(f'1080x{min(740,self.winfo_screenheight()-100)}');self.minsize(900,600)
             self.transient(parent);self.grab_set()
         self.controls=[]
+        self.update_kinds=set()
+        self.period_callback=None
         self.name=tk.StringVar();self.month=parent.month;self.year=parent.year
         self.version=tk.StringVar(value='pdf');self.status=tk.StringVar(value='Carregando nomes dos condomínios…')
-        body=ttk.Frame(self,padding=16);body.pack(fill='both',expand=True)
+        body=ttk.Frame(self,padding=(18,14));body.pack(fill='both',expand=True)
         body.columnconfigure(0,weight=1);body.rowconfigure(3,weight=1)
-        header=ttk.Frame(body);header.grid(row=0,column=0,sticky='ew',pady=(0,10))
-        ttk.Label(header,text='AutoWord',style='Title.TLabel').pack(side='left')
+        header=ttk.Frame(body);header.grid(row=0,column=0,sticky='ew',pady=(0,12))
+        title=ttk.Frame(header);title.pack(side='left')
+        ttk.Label(title,text='Central de fechamento',style='Title.TLabel').pack(anchor='w')
+        self.book_status=tk.StringVar()
+        ttk.Label(title,textvariable=self.book_status,style='Muted.TLabel').pack(anchor='w')
         self.action(header,'Opções',self.configure_paths).pack(side='right')
         self.action(header,'Controle mensal',self.monthly_control).pack(side='right',padx=8)
-        self.action(header,'Atualização em lote',self.open_batch).pack(side='right',padx=8)
-        row=ttk.Frame(body);row.grid(row=1,column=0,sticky='ew')
-        ttk.Label(row,text='Condomínio').pack(side='left')
-        self.names=ttk.Combobox(row,textvariable=self.name,state='normal',width=38);self.names.pack(side='left',padx=8)
+        self.action(header,'Atualização em lote',self.open_batch).pack(side='right')
+
+        context=ttk.Frame(body,style='Card.TFrame',padding=(12,9))
+        context.grid(row=1,column=0,sticky='ew',pady=(0,10))
+        selection=ttk.Frame(context,style='Card.TFrame');selection.pack(fill='x')
+        condo=ttk.Frame(selection,style='Card.TFrame');condo.pack(side='left',padx=(0,14))
+        ttk.Label(condo,text='Condomínio',style='Card.TLabel').pack(anchor='w')
+        self.names=ttk.Combobox(condo,textvariable=self.name,state='normal',width=34)
+        self.names.pack(fill='x',pady=(3,0))
         from engine import MONTHS
         self.months=MONTHS
-        self.month_box=ttk.Combobox(row,textvariable=self.month,values=[m.title() for m in MONTHS],state='readonly',width=13);self.month_box.pack(side='left',padx=5)
-        self.year_box=ttk.Spinbox(row,textvariable=self.year,from_=2000,to=2099,width=6);self.year_box.pack(side='left')
+        period=ttk.Frame(selection,style='Card.TFrame');period.pack(side='left',padx=(0,10))
+        ttk.Label(period,text='Competência para atualização',style='Card.TLabel').grid(row=0,columnspan=2,sticky='w')
+        self.month_box=ttk.Combobox(period,textvariable=self.month,values=[m.title() for m in MONTHS],state='readonly',width=12)
+        self.month_box.grid(row=1,column=0,pady=(3,0))
+        self.year_box=ttk.Spinbox(period,textvariable=self.year,from_=2000,to=2099,width=6)
+        self.year_box.grid(row=1,column=1,padx=(5,0),pady=(3,0))
         self.controls.extend([self.names,self.month_box,self.year_box])
-        self.action(row,'Buscar arquivos',self.query).pack(side='left',padx=8)
-        self.book_status=tk.StringVar(value='Pendente')
-        legend=ttk.Frame(body);legend.grid(row=2,column=0,sticky='ew',pady=4)
+        self.action(selection,'Buscar arquivos',self.query).pack(side='left',anchor='s')
+        self.setup_button=self.action(selection,'Configurar AutoWord',self.configure_paths)
         self.document_period=tk.StringVar(value='Competência dos Words: selecione um condomínio.')
-        ttk.Label(legend,textvariable=self.document_period,style='Section.TLabel',wraplength=1000).pack(side='bottom',anchor='w',pady=(4,0))
-        ttk.Label(legend,textvariable=self.book_status,style='Section.TLabel').pack(side='right')
-        self.select_all_button=self.action(legend,'☑ Selecionar todos',lambda:self.check_all(True));self.select_all_button.pack(side='left')
-        self.clear_all_button=self.action(legend,'☐ Desmarcar todos',lambda:self.check_all(False));self.clear_all_button.pack(side='left',padx=6)
+        ttk.Label(context,textvariable=self.document_period,style='Card.TLabel',wraplength=790).pack(anchor='w',pady=(8,0))
+
+        legend=ttk.Frame(body);legend.grid(row=2,column=0,sticky='ew',pady=(0,5))
+        ttk.Label(legend,text='Documentos',style='Section.TLabel').pack(side='left')
+        self.clear_all_button=self.action(legend,'Limpar seleção de impressão',lambda:self.check_all(False))
+        self.clear_all_button.pack(side='right')
+        self.select_all_button=self.action(legend,'Marcar disponíveis',lambda:self.check_all(True))
+        self.select_all_button.pack(side='right',padx=6)
         host=ttk.Frame(body);host.grid(row=3,column=0,sticky='nsew')
-        self.tree=ttk.Treeview(host,columns=('check','group','file','printer'),show='headings',selectmode='browse')
-        for key,title,width in [('check','Imprimir',85),('group','Documento / ordem',195),('file','Arquivo',460),('printer','Impressora',280)]:
-            self.tree.heading(key,text=title);self.tree.column(key,width=width,minwidth=50,stretch=key in ('file','printer'))
-        self.tree.column('check',anchor='center',stretch=False)
-        self.tree.tag_configure('even',background='#FFFFFF')
-        self.tree.tag_configure('odd',background='#F2F6F9')
-        self.tree.tag_configure('missing',foreground='#8B4D23')
-        self.tree.pack(side='left',fill='both',expand=True);scroll=ttk.Scrollbar(host,command=self.tree.yview);scroll.pack(side='right',fill='y');self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.bind('<Button-1>',self.click);self.tree.bind('<space>',self.toggle)
-        row=ttk.Frame(body);row.grid(row=4,column=0,sticky='ew',pady=10)
-        self.action(row,'Abrir arquivo',self.open_file).pack(side='left',padx=6)
-        self.action(row,'Vincular arquivo…',self.link).pack(side='left',padx=6)
-        self.action(row,'Vincular Word Jurídico…',lambda:self.link(True)).pack(side='left')
-        row=ttk.Frame(body);row.grid(row=5,column=0,sticky='ew',pady=4)
-        self.action(row,'Comparar obrigações',self.compare).pack(side='left')
-        self.action(row,'Abrir Word Jurídico',lambda:self.open_file(True)).pack(side='left',padx=6)
-        self.action(row,'Conferi manualmente',self.manual_review).pack(side='left')
-        self.pdf_radio=ttk.Radiobutton(row,text='Usar PDF pessoal',variable=self.version,value='pdf',command=self.redraw);self.pdf_radio.pack(side='left',padx=10)
-        self.word_radio=ttk.Radiobutton(row,text='Usar Word atual',variable=self.version,value='word',command=self.redraw);self.word_radio.pack(side='left')
-        self.controls.extend((self.pdf_radio,self.word_radio))
-        summary=ttk.Frame(body);summary.grid(row=6,column=0,sticky='ew',pady=6)
+        self.tree=ttk.Treeview(host,columns=('update','check','file','state','action'),show='tree headings',selectmode='browse')
+        self.tree.heading('#0',text='Documento')
+        self.tree.column('#0',width=190,minwidth=150)
+        for key,title,width in [('update','Atualizar',86),('check','Imprimir',84),('file','Arquivo',235),
+                                ('state','Situação',145),('action','Ação',135)]:
+            self.tree.heading(key,text=title)
+            self.tree.column(key,width=width,minwidth=width if key in ('update','check') else 105,stretch=key in ('file','#0'))
+        for key in ('update','check'):self.tree.column(key,anchor='center')
+        self.tree.tag_configure('group',background=COLORS['section'],foreground=COLORS['text'],font=('Segoe UI',10,'bold'))
+        self.tree.tag_configure('even',background=COLORS['panel'])
+        self.tree.tag_configure('odd',background=COLORS['alternate'])
+        self.tree.tag_configure('attention',foreground=COLORS['attention'])
+        self.tree.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(host,command=self.tree.yview);scroll.pack(side='right',fill='y')
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.bind('<Button-1>',self.click)
+        self.tree.bind('<space>',self.toggle)
+        self.tree.bind('<Key-u>',lambda event:self.toggle(update=True))
+        self.tree.bind('<Return>',lambda event:self.handle_row_action())
+        self.tree.bind('<<TreeviewSelect>>',lambda event:self.refresh_row_actions())
+
+        row=ttk.Frame(body);row.grid(row=4,column=0,sticky='ew',pady=(7,4))
+        self.row_button=self.action(row,'Selecionar um documento',self.handle_row_action)
+        self.row_button.pack(side='left')
+        self.link_button=self.action(row,'Trocar vínculo…',self.link)
+        self.link_button.pack(side='left',padx=6)
+        self.report_menu=ttk.Menubutton(row,text='Obrigações')
+        self.report_menu.pack(side='right')
+        self.controls.append(self.report_menu)
+        report_menu=self.report_actions=tk.Menu(self.report_menu,tearoff=False)
+        self.report_menu.configure(menu=report_menu)
+        report_menu.add_command(label='Comparar relatórios',command=self.compare)
+        report_menu.add_command(label='Abrir Word do Jurídico',command=lambda:self.open_file(True))
+        report_menu.add_command(label='Vincular Word do Jurídico…',command=lambda:self.link(True))
+        report_menu.add_command(label='Vincular PDF pessoal…',command=lambda:self.link(report_pdf=True))
+        report_menu.add_command(label='Confirmar conferência manual',command=self.manual_review)
+        report_menu.add_separator()
+        report_menu.add_radiobutton(label='Imprimir PDF pessoal',variable=self.version,value='pdf',command=self.redraw)
+        report_menu.add_radiobutton(label='Imprimir Word atual',variable=self.version,value='word',command=self.redraw)
+
+        summary=ttk.Frame(body);summary.grid(row=6,column=0,sticky='ew',pady=(3,6))
         toolbar=ttk.Frame(summary);toolbar.pack(fill='x')
         ttk.Label(toolbar,text='Resumo',style='Section.TLabel').pack(side='left')
         self.action(toolbar,'Ver detalhes',self.open_details).pack(side='right')
-        host=ttk.Frame(summary);host.pack(fill='both',expand=True)
-        self.details=tk.Text(host,height=5,wrap='word',state='disabled',font=('Segoe UI',10));self.details.pack(side='left',fill='both',expand=True)
-        scroll=ttk.Scrollbar(host,command=self.details.yview);scroll.pack(side='right',fill='y');self.details.configure(yscrollcommand=scroll.set)
+        host=ttk.Frame(summary);host.pack(fill='both',expand=True,pady=(4,0))
+        self.details=tk.Text(host,height=4,wrap='word',state='disabled',font=('Segoe UI',10),
+                             background=COLORS['panel'],foreground=COLORS['text'],relief='flat',padx=8,pady=5)
+        self.details.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(host,command=self.details.yview);scroll.pack(side='right',fill='y')
+        self.details.configure(yscrollcommand=scroll.set)
         self.technical_details='';self.operation_log=[]
         footer=ttk.Frame(body);footer.grid(row=7,column=0,sticky='ew')
-        ttk.Label(footer,textvariable=self.status,wraplength=740).pack(side='left',fill='x',expand=True)
+        ttk.Label(footer,textvariable=self.status,style='Muted.TLabel',wraplength=740).pack(side='left',fill='x',expand=True)
+        self.cancel_button=ttk.Button(footer,text='Cancelar',command=self.cancel.set,state='disabled')
+        self.cancel_button.pack(side='right',padx=(8,0))
         actions=ttk.Frame(body);actions.grid(row=8,column=0,sticky='ew',pady=(8,0))
-        self.update_print_button=self.action(actions,'Atualizar e imprimir',lambda:self.update_selected(True));self.update_print_button.configure(style='Primary.TButton');self.update_print_button.pack(side='left')
-        self.action(actions,'Só atualizar',self.update_selected).pack(side='left',padx=8)
-        self.print_button=self.action(actions,'Só imprimir',self.print_selected);self.print_button.pack(side='left')
-        self.action(actions,'Conferir atualização (opcional)',self.preview_update).pack(side='right')
-        self.cancel_button=ttk.Button(footer,text='Cancelar',command=self.cancel.set,state='disabled');self.cancel_button.pack(side='right',padx=8)
+        self.update_print_button=self.action(actions,'Atualizar e imprimir',lambda:self.update_selected(True))
+        self.update_print_button.configure(style='Primary.TButton');self.update_print_button.pack(side='left')
+        self.update_button=self.action(actions,'Só atualizar',self.update_selected)
+        self.update_button.pack(side='left',padx=8)
+        self.print_button=self.action(actions,'Só imprimir',self.print_selected)
+        self.print_button.pack(side='left')
+        self.preview_button=self.action(actions,'Conferir atualização',self.preview_update)
+        self.preview_button.pack(side='right')
         if not embedded:self.protocol('WM_DELETE_WINDOW',self.close)
-        self.names.bind('<<ComboboxSelected>>',lambda e:self.query())
+        self.names.bind('<<ComboboxSelected>>',lambda event:self.query())
         self.names.bind('<Return>',self.choose_typed_name)
-        self.names.bind('<Escape>',lambda e:self.name.set(''))
+        self.names.bind('<Escape>',lambda event:self.name.set(''))
         self.name_trace=self.name.trace_add('write',self.filter_names)
-        self.month_box.bind('<<ComboboxSelected>>',lambda e:self.invalidate())
-        self.month_trace=self.month.trace_add('write',lambda *args:self.invalidate())
-        self.year_trace=self.year.trace_add('write',lambda *args:self.invalidate())
+        self.month_trace=self.month.trace_add('write',self.schedule_period_query)
+        self.year_trace=self.year.trace_add('write',self.schedule_period_query)
         self.poll_callback=self.after(100,self.poll)
         self.reload()
 
@@ -272,7 +372,9 @@ class CentralView:
 
     def invalidate(self):
         if self.busy or self.parent.busy:return
-        self.result=None;self.comparison=None;self.checked.clear();self.tree.delete(*self.tree.get_children());self.version.set('pdf')
+        self.result=None;self.comparison=None;self.checked.clear();self.update_kinds.clear()
+        self.tree.delete(*self.tree.get_children());self.version.set('pdf')
+        self.refresh_actions()
         self.status.set('Clique em Buscar arquivos para a seleção atual.')
         self.document_period.set('Competência dos Words: busque os arquivos para consultar.')
         self.show_details('Busque os arquivos para consultar o resumo desta seleção.')
@@ -280,13 +382,23 @@ class CentralView:
 
     def configure_paths(self):
         if not self.busy and not self.parent.busy:
-            settings_dialog(self,self.path,self.reload)
+            settings_dialog(self,self.path,self.reload,setup=not bool(self.settings['root']))
 
     def reload(self):
         self.catalog_cancel.set();self.catalog_cancel=threading.Event()
         self.settings=load_settings(self.path);self.invalidate()
         settings=copy.deepcopy(self.settings);mappings=copy.deepcopy(self.parent.mappings)
         self.loaded_key=cache_key(settings['root'],mappings)
+        if not settings['root']:
+            self.catalog_loading=False
+            self.workspace_loaded=False
+            self.set_names(())
+            self.setup_button.pack(side='left',anchor='s',padx=8)
+            self.status.set('Configure a pasta dos condomínios para começar.')
+            self.document_period.set('Competência dos Words: aguardando a configuração.')
+            self.show_details('Use Configurar AutoWord para verificar pastas e impressoras.')
+            return
+        self.setup_button.pack_forget()
         cached=load_cache(self.path.with_name('workspace_cache.json'),settings['root'],mappings) if self.embedded else None
         if cached:
             self.apply_workspace(cached,cached=True)
@@ -343,13 +455,37 @@ class CentralView:
             self.reload();return
         if getattr(self.parent,'document_revision',0)!=self.batch_revision:
             self.invalidate()
-            if self.name.get():self.after_idle(self.query)
+        if self.result is None and self.name.get() in self.catalog_names:self.after_idle(self.run_period_query)
+
+    def schedule_period_query(self,*args):
+        self.invalidate()
+        self.cancel_period_query()
+        if self.name.get() in self.catalog_names:
+            self.period_callback=self.after(350,self.run_period_query)
+
+    def cancel_period_query(self):
+        if self.period_callback is not None:
+            self.after_cancel(self.period_callback)
+            self.period_callback=None
+
+    def run_period_query(self):
+        self.period_callback=None
+        if not self.winfo_ismapped() or self.name.get() not in self.catalog_names:return
+        grab=str(self.tk.call('grab','current',self._w))
+        if grab and grab!=str(self):return
+        try:_,_,year=self.context()
+        except ValueError:return
+        if 2000<=year<=2099:self.query()
 
     def context(self):
         return self.name.get(),self.months.index(self.month.get().lower())+1,int(self.year.get())
 
     def query(self):
+        self.cancel_period_query()
         if self.busy or self.parent.busy:return
+        if not self.settings['root']:
+            self.configure_paths()
+            return
         try:
             name,month,year=self.context()
             if not name or not 2000<=year<=2099:raise ValueError('Selecione o condomínio e uma competência válida.')
@@ -407,6 +543,7 @@ class CentralView:
             for widget in self.controls:widget.configure(state='disabled' if external else 'normal')
             if not external:
                 self.names.configure(state='normal');self.month_box.configure(state='readonly')
+                self.refresh_actions()
         try:
             for _ in range(40):
                 kind,value=self.events.get_nowait()
@@ -454,7 +591,8 @@ class CentralView:
                     self.set_names(self.catalog_names)
                     self.refresh_book_status()
                     self.result=value;self.show_period(value)
-                    self.checked={i for i,row in enumerate(value['rows']) if row['checked']}
+                    self.update_kinds=set(self.settings.get('update_kinds',range(4)))
+                    self.checked={i for i,row in enumerate(value['rows']) if row['checked'] and row['path']}
                     self.redraw();self.show_details(search_message(value,self.checked))
                     self.status.set('Consulta incompleta. Veja a etapa interrompida nos detalhes.' if value.get('query_incomplete') else 'Consulta concluída. Confira o resumo e a seleção dos documentos.')
                     notice=value.get('obligation_notice') or value.get('due_notice')
@@ -485,6 +623,7 @@ class CentralView:
                     self.busy=False;self.parent.busy=False
                     for widget in self.controls:widget.configure(state='normal')
                     self.names.configure(state='normal');self.month_box.configure(state='readonly');self.cancel_button.configure(state='disabled')
+                    self.refresh_actions()
                     self.set_names(self.catalog_names)
                     self.refresh_book_status()
                     self.parent.events.put(('central_done',None))
@@ -496,39 +635,139 @@ class CentralView:
         summary=period_summary(result)
         self.document_period.set(summary.split('\n')[0]+(' Confira os detalhes abaixo.' if '\n' in summary else ''))
 
+    def row_path(self,row):
+        if row['group']=='obligations' and self.version.get()=='word':
+            return self.result['word']
+        return row['path']
+
+    def row_state(self,row):
+        if not self.row_path(row):return 'Arquivo ausente'
+        if row['group']=='obligations' and (not self.comparison or not self.version.get()):
+            return 'Requer conferência'
+        if not row['printer']:return 'Sem impressora'
+        return 'Pronto'
+
+    def selected_row(self):
+        selected=self.tree.selection()
+        if selected and selected[0].isdigit() and self.result:
+            return self.result['rows'][int(selected[0])]
+        return None
+
+    def row_action_label(self,row):
+        if not self.row_path(row):return 'Vincular extrato' if row['group']=='statement' else 'Vincular arquivo'
+        if row['group']=='obligations':
+            if not self.comparison:return 'Conferir relatório'
+            if not self.version.get():return 'Escolher versão'
+        if not row['printer']:return 'Configurar impressora'
+        return 'Abrir arquivo'
+
+    def refresh_row_actions(self):
+        if self.busy or self.parent.busy:return
+        row=self.selected_row()
+        self.row_button.configure(text=self.row_action_label(row) if row else 'Selecionar um documento',
+                                  state='normal' if row else 'disabled')
+        self.link_button.configure(state='normal' if row and self.row_path(row) else 'disabled')
+
+    def refresh_actions(self):
+        if self.busy or self.parent.busy:return
+        rows=self.result['rows'] if self.result else ()
+        keys={f'closing{kind}' for kind in self.update_kinds}
+        updates=[row for row in rows if row['group']=='closing' and row['key'] in keys]
+        prints=[row for i,row in enumerate(rows) if i in self.checked]
+        available=any(self.row_path(row) for row in rows)
+        can_update=bool(updates) and all(row.get('source_path',row['path']) for row in updates)
+        can_print=bool(prints) and all(self.row_state(row)=='Pronto' for row in prints)
+        can_combine=can_update and can_print and all(row in updates for row in prints if row['group']=='closing')
+        primary=self.update_print_button if can_combine else self.update_button if can_update else self.print_button if can_print else None
+        for button in (self.update_print_button,self.update_button,self.print_button):
+            button.configure(style='Primary.TButton' if button is primary else 'TButton')
+        self.update_button.configure(state='normal' if can_update else 'disabled')
+        self.preview_button.configure(state='normal' if can_update else 'disabled')
+        self.print_button.configure(state='normal' if can_print else 'disabled',
+                                    text=f'Imprimir {len(prints)} disponíveis' if prints and self.missing_print_files() else 'Só imprimir')
+        self.update_print_button.configure(state='normal' if can_combine else 'disabled',
+            text=f'Atualizar {len(updates)} e enviar {len(prints)} à fila' if updates and prints else 'Atualizar e imprimir')
+        self.select_all_button.configure(state='normal' if available else 'disabled')
+        self.clear_all_button.configure(state='normal' if prints else 'disabled')
+        self.report_menu.configure(state='normal' if rows else 'disabled')
+        self.refresh_row_actions()
+
     def redraw(self):
         if not self.result:return
         selected=self.tree.selection()
         focus=self.tree.focus()
+        expanded={iid for iid in self.tree.get_children() if self.tree.item(iid,'open')}
+        first_draw=not self.tree.get_children()
         self.tree.delete(*self.tree.get_children())
-        for i,row in enumerate(self.result['rows']):
-            path=self.result['word'] if row['group']=='obligations' and self.version.get()=='word' else row['path']
-            self.tree.insert('','end',iid=str(i),values=('☑' if i in self.checked else '☐',row['label'],Path(path).name if path else 'Arquivo não localizado — vincule ou desmarque',row['printer']),tags=(('even' if i%2==0 else 'odd'),)+(() if path else ('missing',)))
+        groups=(('closing','Fechamento'),('statement','Extratos'),('obligations','Obrigações'))
+        for group,label in groups:
+            rows=[(i,row) for i,row in enumerate(self.result['rows']) if row['group']==group]
+            if not rows:continue
+            self.tree.insert('','end',iid=group,text=label,open=first_draw or group in expanded,tags=('group',))
+            for i,row in rows:
+                path=self.row_path(row)
+                if group=='closing':
+                    kind=int(row['key'].removeprefix('closing'))
+                    update='☑' if kind in self.update_kinds else '☐'
+                else:update='—'
+                state=self.row_state(row)
+                tags=('even' if i%2==0 else 'odd',)+(() if state=='Pronto' else ('attention',))
+                label='Extrato' if group=='statement' else row['label']
+                self.tree.insert(group,'end',iid=str(i),text=label,values=(update,'☑' if i in self.checked else '☐',
+                                 Path(path).name if path else '—',state,self.row_action_label(row)),tags=tags)
         if selected and self.tree.exists(selected[0]):self.tree.selection_set(selected[0])
         if focus and self.tree.exists(focus):self.tree.focus(focus)
+        self.refresh_actions()
 
     def click(self,event):
-        if self.tree.identify_column(event.x)=='#1':
-            row=self.tree.identify_row(event.y)
-            if row:
-                self.tree.selection_set(row);self.tree.focus(row)
-                self.toggle(index=int(row))
-                return 'break'
+        column=self.tree.identify_column(event.x)
+        item=self.tree.identify_row(event.y)
+        if item.isdigit() and column in ('#1','#2','#5'):
+            self.tree.selection_set(item);self.tree.focus(item)
+            if column=='#5':self.handle_row_action()
+            else:self.toggle(index=int(item),update=column=='#1')
+            return 'break'
 
-    def toggle(self,event=None,index=None):
+    def toggle(self,event=None,index=None,*,update=False):
         if self.busy or self.parent.busy or not self.result:return 'break'
         if index is None:
             selected=self.tree.selection()
-            if not selected:return 'break'
+            if not selected or not selected[0].isdigit():return 'break'
             index=int(selected[0])
-        if index in self.checked:self.checked.remove(index)
-        else:self.checked.add(index)
-        self.redraw();self.show_details(search_message(self.result,self.checked));return 'break'
+        row=self.result['rows'][index]
+        if update and row['group']=='closing':
+            kind=int(row['key'].removeprefix('closing'))
+            self.update_kinds.symmetric_difference_update({kind})
+        elif not update and self.row_path(row):
+            self.checked.symmetric_difference_update({index})
+        self.redraw()
+        self.show_details(search_message(self.result,self.checked))
+        return 'break'
 
     def check_all(self,include):
         if self.busy or self.parent.busy or not self.result:return
-        self.checked=set(range(len(self.result['rows']))) if include else set()
+        self.checked={i for i,row in enumerate(self.result['rows']) if self.row_path(row)} if include else set()
         self.redraw();self.show_details(search_message(self.result,self.checked))
+
+    def missing_print_files(self):
+        if not self.result:return []
+        return [row['label'] for row in self.result['rows'] if row['group'] in ('closing','statement')
+                and not self.row_path(row)]
+
+    def handle_row_action(self):
+        if self.busy or self.parent.busy:return 'break'
+        row=self.selected_row()
+        if row:
+            if not self.row_path(row):self.link()
+            elif row['group']=='obligations' and (not self.comparison or not self.version.get()):
+                if not self.result['word']:self.link(True)
+                elif self.comparison and not self.version.get():
+                    self.report_actions.tk_popup(self.report_menu.winfo_rootx(),
+                                                 self.report_menu.winfo_rooty()+self.report_menu.winfo_height())
+                else:self.compare()
+            elif not row['printer']:self.configure_paths()
+            else:self.open_file()
+        return 'break'
 
     def show_details(self,text):
         self.technical_details=text['details'] if isinstance(text,dict) else str(text)
@@ -567,23 +806,25 @@ class CentralView:
         if not messagebox.askyesno('Conferência manual','Você abriu e conferiu os dois relatórios? Esta confirmação permite imprimir mesmo sem comparação automática completa.',parent=self):return
         self.comparison={'equal':False,'hashes':{str(p):digest(Path(p)) for p in (pdf,word)},'diff':'Conferência manual confirmada pelo usuário.'}
         self.version.set('')
-        self.show_details(self.comparison['diff']+' Escolha PDF pessoal ou Word atual.')
+        self.redraw()
+        self.show_details(self.comparison['diff']+' Escolha PDF pessoal ou Word atual em Obrigações.')
 
     def open_file(self,word=False):
         if not self.result:return
-        path=self.result['word'] if word else self.result['rows'][int(self.tree.selection()[0])]['path'] if self.tree.selection() else None
-        if not word and self.tree.selection() and self.result['rows'][int(self.tree.selection()[0])]['group']=='obligations' and self.version.get()=='word':path=self.result['word']
+        row=self.selected_row()
+        path=self.result['word'] if word else self.row_path(row) if row else None
         if path:
             try:os.startfile(str(path))
             except Exception as exc:messagebox.showerror('Abrir arquivo',str(exc),parent=self)
 
-    def link(self,word=False):
+    def link(self,word=False,*,report_pdf=False):
         if not self.result:return
         if word:key='report_word';group='word'
+        elif report_pdf:key='report_pdf';group='obligations'
         else:
-            selected=self.tree.selection()
-            if not selected:messagebox.showinfo('Vincular','Selecione a linha do documento na lista.',parent=self);return
-            row=self.result['rows'][int(selected[0])];key=row['key'];group=row['group']
+            row=self.selected_row()
+            if not row:messagebox.showinfo('Vincular','Selecione a linha do documento na lista.',parent=self);return
+            key=row['key'];group=row['group']
         pdf=group in ('statement','obligations')
         if group=='statement':paths=filedialog.askopenfilenames(parent=self,title='Selecione os extratos deste condomínio e competência',filetypes=[('PDF','*.pdf')])
         else:
@@ -607,6 +848,7 @@ class CentralView:
         try:
             month,year=self.context()[1:];state=self.update_state()
             result=copy.deepcopy(self.result);settings=copy.deepcopy(self.settings)
+            settings['update_kinds']=sorted(self.update_kinds)
         except Exception as exc:messagebox.showerror('Conferência',str(exc),parent=self);return
         def work():
             with Word() as word:
@@ -619,6 +861,7 @@ class CentralView:
         try:
             month,year=self.context()[1:];state=self.update_state()
             result=copy.deepcopy(self.result);settings=copy.deepcopy(self.settings)
+            settings['update_kinds']=sorted(self.update_kinds)
             kinds=settings.get('update_kinds',range(4))
             closing_condo(result,kinds)
             rows=selected_plan(result,self.checked,self.version.get(),self.comparison) if printing else None
@@ -626,8 +869,11 @@ class CentralView:
                 raise ValueError('Marque para atualização todos os Words selecionados para impressão em Opções.')
             summary=f"{result['name']} — {month:02}/{year}\nAtualizar: "+', '.join(LABELS[k] for k in kinds)
             summary+='\nDestino: '+(settings.get('destination') or 'pasta original do fechamento')
-            if settings.get('create_subfolder'):summary+=f' / {year}-{month:02}'
-            if rows is not None:summary+='\n\nImprimir, nesta ordem:\n'+'\n'.join(f"{r['label']} → {r['printer']}" for r in rows)
+            if settings.get('destination'):summary+=f" / {result['name']} / {year}-{month:02}"
+            elif settings.get('create_subfolder'):summary+=f' / {year}-{month:02}'
+            if rows is not None:
+                summary+='\n\nImprimir, nesta ordem:\n'+'\n'.join(f"{r['label']} → {r['printer']}" for r in rows)
+                if self.missing_print_files():summary+='\n\nFicarão de fora: '+', '.join(self.missing_print_files())+'.'
         except Exception as exc:messagebox.showerror('Atualização',str(exc),parent=self);return
         if not messagebox.askyesno('Atualizar e imprimir' if printing else 'Só atualizar',summary+'\n\nContinuar?',parent=self):return
         self.parent.state_dirty=True
@@ -669,10 +915,13 @@ class CentralView:
             rows=selected_plan(self.result,self.checked,self.version.get(),self.comparison)
             summary='\n'.join(f"{i+1}. {row['label']} ({Path(row['path']).name}) → {row['printer']}" for i,row in enumerate(rows))
         except Exception as exc:messagebox.showerror('Impressão',str(exc),parent=self);return
+        missing=self.missing_print_files()
+        if missing:summary+='\n\nFicarão de fora: '+', '.join(missing)+'.'
         if not messagebox.askyesno('Confirmar impressão',summary+'\n\nUma cópia, somente frente. Enviar estes documentos?',parent=self):return
         self.print_request=rows
         def work():
             count=self.tracked_print(rows,self.cancel,lambda text:self.events.put(('log',text)),Word)
+            if self.cancel.is_set():return 'Envio cancelado. Confira os documentos já recebidos pela fila.'
             return f'{count}/{len(rows)} documento(s) enviado(s). Confira a fila das impressoras; não há repetição automática em caso de falha.'
         self.run(work,'printed')
 
@@ -713,7 +962,10 @@ class CentralView:
         dialog=tk.Toplevel(self);dialog.title('Controle mensal — '+period);dialog.transient(self.winfo_toplevel());dialog.grab_set();dialog.geometry('780x530')
         body=ttk.Frame(dialog,padding=16);body.pack(fill='both',expand=True)
         total=tk.StringVar(master=dialog)
-        ttk.Label(body,textvariable=total,style='Section.TLabel').pack(anchor='w',pady=(0,8))
+        toolbar=ttk.Frame(body);toolbar.pack(fill='x',pady=(0,8))
+        ttk.Label(toolbar,textvariable=total,style='Section.TLabel',wraplength=560).pack(side='left')
+        only_pending=tk.BooleanVar(master=dialog)
+        ttk.Checkbutton(toolbar,text='Só pendências',variable=only_pending,command=lambda:redraw()).pack(side='right')
         host=ttk.Frame(body);host.pack(fill='both',expand=True)
         tree=ttk.Treeview(host,columns=('name','status','words','sent'),show='headings',selectmode='browse')
         for key,label,width in [('name','Condomínio',270),('status','Situação',190),('words','Words',75),('sent','Envios confirmados',160)]:
@@ -722,13 +974,17 @@ class CentralView:
         scroll=ttk.Scrollbar(host,command=tree.yview);scroll.pack(side='right',fill='y');tree.configure(yscrollcommand=scroll.set)
         def redraw():
             selected=tree.selection();tree.delete(*tree.get_children())
+            snapshot=self.history.month(root,names,period) if names else {}
             for i,name in enumerate(names):
-                b=self.history.get(root,name,period)
-                tree.insert('','end',iid=str(i),values=(name,self.history.status(b),len(b.get('updated',[])),sum(v['state']=='sent' for v in b.get('sent',{}).values())))
-            if selected:tree.selection_set(selected)
-            totals=self.history.totals(root,names,period)
+                book=snapshot[name]
+                if only_pending.get() and book.get('complete'):continue
+                tree.insert('','end',iid=str(i),values=(name,self.history.status(book),len(book.get('updated',[])),
+                            sum(v['state']=='sent' for v in book.get('sent',{}).values())))
+            if selected and tree.exists(selected[0]):tree.selection_set(selected)
+            totals=self.history.totals(root,names,period,snapshot=snapshot)
             text=f"{totals['complete']}/{totals['total']} livros concluídos · Tempo das operações: {totals['seconds']/60:.1f} min"
             if totals['saving'] is not None:text+=f" · Economia estimada ({totals['saving_count']} livros): {totals['saving']/60:.1f} min"
+            if only_pending.get():text+=f' · {len(tree.get_children())} pendentes'
             total.set(text)
         def chosen():
             return names[int(tree.selection()[0])] if tree.selection() else None
@@ -736,10 +992,16 @@ class CentralView:
             name=chosen()
             if name and messagebox.askyesno('Concluir livro' if value else 'Reabrir livro',f'{name} — {period}\n'+('Você conferiu as folhas e terminou a montagem do livro?' if value else 'Retirar a confirmação de conclusão deste livro?'),parent=dialog):
                 self.history.complete(root,name,period,value);redraw();self.refresh_book_status()
-        def open_selected():
+        def open_selected(event=None):
+            if event and event.type==tk.EventType.ButtonPress:
+                item=tree.identify_row(event.y)
+                if not item:return
+                tree.selection_set(item)
             name=chosen()
             if name:
                 dialog.destroy();self.name.set(name);self.query()
+        tree.bind('<Double-1>',open_selected)
+        tree.bind('<Return>',open_selected)
         actions=ttk.Frame(body);actions.pack(fill='x',pady=10)
         ttk.Button(actions,text='Abrir condomínio',command=open_selected).pack(side='left')
         ttk.Button(actions,text='Concluir livro',command=lambda:complete(True)).pack(side='left',padx=8)
@@ -782,6 +1044,7 @@ class CentralView:
 
     def destroy(self):
         self.catalog_cancel.set()
+        self.cancel_period_query()
         if hasattr(self,'poll_callback'):self.after_cancel(self.poll_callback)
         if hasattr(self,'year_trace'):self.year.trace_remove('write',self.year_trace)
         if hasattr(self,'name_trace'):self.name.trace_remove('write',self.name_trace)
