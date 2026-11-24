@@ -9,7 +9,7 @@ from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from pypdf import PdfWriter
 from pypdf.generic import NameObject,DictionaryObject,DecodedStreamObject
-from central_service import DEFAULTS,catalog,owner,search,selected_plan,verify_plan,compare_texts,compare_reports,digest,statement_owners,validate_statement_aliases
+from central_service import DEFAULTS,catalog,owner,search,selected_plan,verify_plan,compare_texts,compare_reports,digest,statement_owners,validate_statement_aliases,check_workspace
 from central_print import print_pdf,execute_plan
 from engine import FILES
 
@@ -198,6 +198,24 @@ class Central(unittest.TestCase):
         self.cfg['overrides']={'ALFA':{'statements:2026-09':[str(chosen)]}}
         self.assertEqual([r['path'] for r in self.lookup()['rows'] if r['group']=='statement'],[chosen])
         self.assertIsNone(next(r['path'] for r in search(self.cfg,'ALFA',10,2026)['rows'] if r['group']=='statement'))
+    def test_missing_statement_does_not_enter_default_print_plan(self):
+        for path in self.month.glob('ALFA*.pdf'):
+            path.unlink()
+        result=self.lookup()
+        missing=next(row for row in result['rows'] if row['group']=='statement')
+        self.assertFalse(missing['checked'])
+        selected={i for i,row in enumerate(result['rows']) if row['checked']}
+        self.assertEqual(len(selected_plan(result,selected)),4)
+
+    def test_workspace_configuration_checks_access_and_keeps_printing_optional(self):
+        find_printers=Mock(return_value=(['HP TEST'],'HP TEST'))
+        checks=check_workspace(dict(DEFAULTS,root=str(self.root)),find_printers)
+        self.assertTrue(all(ok for _,ok,_ in checks))
+        find_printers.assert_not_called()
+        checks=check_workspace(dict(self.cfg,statements=str(self.root/'ausente')),find_printers)
+        failed=[label for label,ok,_ in checks if not ok]
+        self.assertEqual(failed,['Pasta de extratos','Impressora de obrigações'])
+
     def test_optional_obligations_and_printer_routing_with_exact_order(self):
         result=self.lookup();selected={i for i,r in enumerate(result['rows']) if r['checked']}
         rows=selected_plan(result,selected)
